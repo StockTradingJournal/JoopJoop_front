@@ -168,8 +168,12 @@ export function Phase2Screen({
   onUseItemPeek,
 }: Phase2ScreenProps) {
   const [showPeekSelect, setShowPeekSelect] = useState(false);
+  /** 제출 중인 카드: 손에서 중앙 보드로 날아가는 애니메이션용 */
+  const [flyingCard, setFlyingCard] = useState<{ cardId: number } | null>(null);
 
-  const timeLeft = useTimeLeft(gameState.phase2StartTime, gameState.phase2Timeout ?? gameState.turnTimeout);
+  /** Phase2 라운드 제한 시간(초). 서버에서도 동일 값(10)으로 설정해야 실제 종료 시점과 일치합니다. */
+  const PHASE2_TIMEOUT_SECONDS = 10;
+  const timeLeft = useTimeLeft(gameState.phase2StartTime, PHASE2_TIMEOUT_SECONDS);
 
   const me = gameState.players.find((p) => p.id === currentPlayerId);
   const opponents = gameState.players.filter((p) => p.id !== currentPlayerId);
@@ -184,6 +188,13 @@ export function Phase2Screen({
     else if (type === 'peek' && canPeek) setShowPeekSelect(true);
   };
 
+  const handlePlayCard = (cardId: number) => {
+    if (!isSelecting || me?.hasSelected) return;
+    setFlyingCard({ cardId });
+    onPlayCard(cardId);
+    setTimeout(() => setFlyingCard(null), 850);
+  };
+
   const playerIndex = (id: string) => gameState.players.findIndex((p) => p.id === id);
 
   return (
@@ -196,6 +207,24 @@ export function Phase2Screen({
         backgroundPosition: '0 0, 12px 12px',
       }}
     >
+      {/* 카드 제출 시 손 → 중앙 보드로 날아가며 뒷면으로 깔리는 애니메이션 */}
+      {flyingCard && (
+        <div className="phase2-flying-card-wrapper">
+          <div className="phase2-flying-card-inner">
+            <div
+              className="phase2-flying-card-front flex flex-col overflow-hidden"
+              style={{ backgroundColor: JOB_COLORS[flyingCard.cardId] ?? '#fff' }}
+            >
+              <div className="flex-1 flex items-center justify-center text-2xl">{JOB_EMOJIS[flyingCard.cardId] ?? '?'}</div>
+              <div className="bg-white border-t-2 border-black text-[9px] font-black text-center py-0.5">{flyingCard.cardId}번</div>
+            </div>
+            <div className="phase2-flying-card-back">
+              <Check className="w-6 h-6 text-green-400" />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Peek select modal */}
       {showPeekSelect && (
         <PeekModal
@@ -300,8 +329,6 @@ export function Phase2Screen({
           </span>
           <div className="flex gap-3 justify-center flex-wrap mt-2">
             {gameState.players.map((p) => {
-              const idx = playerIndex(p.id);
-              const isMe = p.id === currentPlayerId;
               if (!p.hasSelected && p.selectedProperty === null) {
                 return (
                   <div key={p.id} className="flex flex-col items-center gap-1">
@@ -312,10 +339,7 @@ export function Phase2Screen({
                 );
               }
               return (
-                <div key={p.id} className="flex flex-col items-center gap-1">
-                  <span className={`text-[10px] font-black ${isMe ? 'bg-blue-500 text-white' : 'bg-black text-white'} px-2 py-0.5 rounded-full`}>
-                    {p.nickname}
-                  </span>
+                <div key={p.id} className="flex flex-col items-center">
                   {gameState.allPlayersSelected && p.selectedProperty ? (
                     <div
                       className="w-16 h-24 border-4 border-black rounded-xl flex flex-col overflow-hidden shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
@@ -434,10 +458,7 @@ export function Phase2Screen({
                         key={c}
                         id={c}
                         isSelected={false}
-                        onClick={() => {
-                          if (!isSelecting || me?.hasSelected) return;
-                          onPlayCard(c);
-                        }}
+                        onClick={() => handlePlayCard(c)}
                       />
                     ))
                   )}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { RefreshCw, Eye, ArrowLeftRight, Timer, Coins, HelpCircle, X } from 'lucide-react';
 import { GameState, Player, ItemType, PeekResult } from '../../lib/socket-types';
 
@@ -164,8 +164,20 @@ export function Phase1Screen({
 }: Phase1ScreenProps) {
   const [bidAmount, setBidAmount] = useState(1000);
   const [showPeekSelect, setShowPeekSelect] = useState(false);
+  /** 응찰 시 "현재 최고가" 박스 재생할 강조 애니메이션 */
+  const [playBidAnimation, setPlayBidAnimation] = useState(false);
+  const prevBidRef = useRef(gameState.currentBid);
 
   const timeLeft = useTimeLeft(gameState.turnStartTime, gameState.turnTimeout);
+
+  useEffect(() => {
+    if (gameState.currentBid > 0 && gameState.currentBid !== prevBidRef.current) {
+      setPlayBidAnimation(true);
+      prevBidRef.current = gameState.currentBid;
+      const t = setTimeout(() => setPlayBidAnimation(false), 500);
+      return () => clearTimeout(t);
+    }
+  }, [gameState.currentBid]);
 
   const me = gameState.players.find((p) => p.id === currentPlayerId);
   const opponents = gameState.players.filter((p) => p.id !== currentPlayerId);
@@ -178,6 +190,11 @@ export function Phase1Screen({
   const canBid = isMyTurn && bidAmount >= minBid && bidAmount <= myEffectiveCoins;
   const canPass = isMyTurn && gameState.mustBidPlayer !== currentPlayerId;
   const isMustBid = gameState.mustBidPlayer === currentPlayerId;
+
+  // 라운드가 바뀌면 배팅 금액을 1000으로 초기화
+  useEffect(() => {
+    setBidAmount(1000);
+  }, [gameState.roundNumber]);
 
   // Update bid input when min changes
   useEffect(() => {
@@ -322,7 +339,9 @@ export function Phase1Screen({
 
         {/* Current bid display */}
         {gameState.currentBid > 0 && (
-          <div className="mt-4 bg-yellow-400 border-4 border-black rounded-2xl px-6 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <div
+            className={`mt-4 bg-yellow-400 border-4 border-black rounded-2xl px-6 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${playBidAnimation ? 'phase1-bid-animate' : ''}`}
+          >
             <span className="font-black text-slate-800">현재 최고가: </span>
             <span className="font-black text-2xl">{gameState.currentBid.toLocaleString()}원</span>
           </div>
