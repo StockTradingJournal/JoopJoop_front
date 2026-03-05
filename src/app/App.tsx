@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { gameSocket } from '../lib/gameSocket';
-import { GameState, ItemType, PeekResult } from '../lib/socket-types';
+import { GameState, ItemType, PeekResult, LastPassEvent, RoundResult } from '../lib/socket-types';
 import { HomeScreen } from './components/HomeScreen';
 import { LobbyScreen } from './components/LobbyScreen';
 import { ItemSelectionScreen } from './components/ItemSelectionScreen';
@@ -16,6 +16,10 @@ export default function App() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   // Peek result received this tick
   const [activePeek, setActivePeek] = useState<PeekResult | null>(null);
+  // Last pass event received this tick
+  const [activePassEvent, setActivePassEvent] = useState<LastPassEvent | null>(null);
+  // Round result (shown when a bidding round ends with a winner)
+  const [activeRoundResult, setActiveRoundResult] = useState<RoundResult | null>(null);
 
   useEffect(() => {
     gameSocket.connect();
@@ -30,6 +34,18 @@ export default function App() {
       if (state.peekResult) {
         setActivePeek(state.peekResult);
         setTimeout(() => setActivePeek(null), 4000);
+      }
+
+      // Handle pass event
+      if (state.lastPassEvent) {
+        setActivePassEvent(state.lastPassEvent);
+        setTimeout(() => setActivePassEvent(null), 4000);
+      }
+
+      // Handle round result
+      if (state.roundResult) {
+        setActiveRoundResult(state.roundResult);
+        setTimeout(() => setActiveRoundResult(null), 3500);
       }
 
       // Screen transitions
@@ -62,6 +78,8 @@ export default function App() {
     setCurrentPlayerId('');
     setGameState(null);
     setActivePeek(null);
+    setActivePassEvent(null);
+    setActiveRoundResult(null);
   }, []);
 
   const handleCreateRoom = async (nickname: string) => {
@@ -145,6 +163,8 @@ export default function App() {
           gameState={gameState}
           currentPlayerId={currentPlayerId}
           activePeek={activePeek}
+          activePassEvent={activePassEvent}
+          activeRoundResult={activeRoundResult}
           onBid={handleBid}
           onPass={handlePass}
           onPlayCard={handlePlayCard}

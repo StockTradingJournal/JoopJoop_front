@@ -1,6 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { RefreshCw, Eye, ArrowLeftRight, Timer, Coins, HelpCircle, X } from 'lucide-react';
-import { GameState, Player, ItemType, PeekResult } from '../../lib/socket-types';
+import { GameState, Player, ItemType, PeekResult, LastPassEvent, RoundResult } from '../../lib/socket-types';
+
+// ── Action Toast types ───────────────────────────────────────────────────────
+interface ActionToast {
+  playerId: string;
+  type: 'pass' | 'bid';
+  label: string;
+  key: number;
+}
 
 // ── Job card data ────────────────────────────────────────────────────────────
 const JOB_DATA: Record<number, { title: string; emoji: string; color: string }> = {
@@ -55,9 +63,10 @@ function JobCard({ id, mini = false, showPassBadge = false }: { id: number; mini
   if (mini) {
     return (
       <div
-        className="flex-none w-14 h-20 border-2 border-black rounded-lg flex flex-col overflow-hidden shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+        className="flex-none w-14 h-20 border-2 border-black rounded-lg flex flex-col overflow-hidden shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] relative"
         style={{ backgroundColor: d.color }}
       >
+        <div className="absolute top-0.5 left-1 text-[8px] font-black opacity-60 leading-none">{id}</div>
         <div className="flex-1 flex items-center justify-center text-lg drop-shadow-sm">{d.emoji}</div>
         <div className="bg-white border-t-2 border-black text-[9px] font-black text-center truncate px-0.5 py-0.5 leading-none">{d.title}</div>
       </div>
@@ -78,6 +87,89 @@ function JobCard({ id, mini = false, showPassBadge = false }: { id: number; mini
           포기 시 획득
         </span>
       )}
+    </div>
+  );
+}
+
+// ── Job Card Scroller ────────────────────────────────────────────────────────
+
+function JobCardScroller({ properties }: { properties: number[] }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollState = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  };
+
+  useEffect(() => {
+    updateScrollState();
+    const el = scrollRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', updateScrollState);
+    const ro = new ResizeObserver(updateScrollState);
+    ro.observe(el);
+    return () => { el.removeEventListener('scroll', updateScrollState); ro.disconnect(); };
+  }, [properties]);
+
+  const scroll = (dir: 'left' | 'right') => {
+    scrollRef.current?.scrollBy({ left: dir === 'left' ? -120 : 120, behavior: 'smooth' });
+  };
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-black text-slate-500">내 직업 카드</span>
+        {(canScrollLeft || canScrollRight) && (
+          <span className="text-[10px] font-bold text-slate-400 flex items-center gap-0.5">
+            ← 드래그 →
+          </span>
+        )}
+      </div>
+      <div className="relative">
+        {/* Left fade */}
+        <div
+          className="absolute left-0 top-0 bottom-0 w-10 z-10 pointer-events-none transition-opacity duration-200"
+          style={{
+            background: 'linear-gradient(to right, rgba(255,255,255,1), transparent)',
+            opacity: canScrollLeft ? 1 : 0,
+          }}
+        />
+        {/* Right fade */}
+        <div
+          className="absolute right-0 top-0 bottom-0 w-10 z-10 pointer-events-none transition-opacity duration-200"
+          style={{
+            background: 'linear-gradient(to left, rgba(255,255,255,1), transparent)',
+            opacity: canScrollRight ? 1 : 0,
+          }}
+        />
+        {/* Left arrow button */}
+        <button
+          onClick={() => scroll('left')}
+          className="absolute left-0 top-1/2 -translate-y-1/2 z-20 w-6 h-6 bg-white border-2 border-black rounded-full flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs font-black transition-all duration-200 hover:scale-110 hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:scale-95 active:shadow-none"
+          style={{ opacity: canScrollLeft ? 1 : 0, pointerEvents: canScrollLeft ? 'auto' : 'none' }}
+        >‹</button>
+        {/* Right arrow button */}
+        <button
+          onClick={() => scroll('right')}
+          className="absolute right-0 top-1/2 -translate-y-1/2 z-20 w-6 h-6 bg-white border-2 border-black rounded-full flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs font-black transition-all duration-200 hover:scale-110 hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:scale-95 active:shadow-none"
+          style={{ opacity: canScrollRight ? 1 : 0, pointerEvents: canScrollRight ? 'auto' : 'none' }}
+        >›</button>
+        <div
+          ref={scrollRef}
+          className="flex gap-1.5 overflow-x-auto pb-1 px-1 min-h-[84px] items-center"
+          style={{ scrollbarWidth: 'none' }}
+        >
+          {properties.length === 0 ? (
+            <span className="text-xs font-bold text-slate-400 w-full text-center">아직 획득한 직업 카드가 없어요</span>
+          ) : (
+            properties.map((c) => <JobCard key={c} id={c} mini />)
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -145,6 +237,8 @@ interface Phase1ScreenProps {
   gameState: GameState;
   currentPlayerId: string;
   activePeek: PeekResult | null;
+  activePassEvent: LastPassEvent | null;
+  activeRoundResult: RoundResult | null;
   onBid: (amount: number) => void;
   onPass: () => void;
   onUseItemReroll: () => void;
@@ -156,6 +250,8 @@ export function Phase1Screen({
   gameState,
   currentPlayerId,
   activePeek,
+  activePassEvent,
+  activeRoundResult,
   onBid,
   onPass,
   onUseItemReroll,
@@ -164,20 +260,69 @@ export function Phase1Screen({
 }: Phase1ScreenProps) {
   const [bidAmount, setBidAmount] = useState(1000);
   const [showPeekSelect, setShowPeekSelect] = useState(false);
-  /** 응찰 시 "현재 최고가" 박스 재생할 강조 애니메이션 */
-  const [playBidAnimation, setPlayBidAnimation] = useState(false);
-  const prevBidRef = useRef(gameState.currentBid);
+  const [bidFlash, setBidFlash] = useState(false);
 
-  const timeLeft = useTimeLeft(gameState.turnStartTime, gameState.turnTimeout);
+  // Per-player action toasts (말풍선)
+  const [actionToasts, setActionToasts] = useState<Record<string, ActionToast>>({});
+  const toastCounterRef = useRef(0);
+
+  // Track previous state to detect changes
+  const prevPlayersRef = useRef<Record<string, { currentBid: number; hasPassed: boolean }>>({});
+  const prevRoundRef = useRef<number>(gameState.roundNumber);
+  const prevCurrentBidRef = useRef<number>(gameState.currentBid);
 
   useEffect(() => {
-    if (gameState.currentBid > 0 && gameState.currentBid !== prevBidRef.current) {
-      setPlayBidAnimation(true);
-      prevBidRef.current = gameState.currentBid;
-      const t = setTimeout(() => setPlayBidAnimation(false), 500);
-      return () => clearTimeout(t);
+    const prev = prevPlayersRef.current;
+    const newToasts: Record<string, ActionToast> = {};
+
+    gameState.players.forEach((player) => {
+      if (player.id === currentPlayerId) return;
+      const prevPlayer = prev[player.id];
+      if (!prevPlayer) return;
+
+      let toastLabel: string | null = null;
+      let toastType: 'pass' | 'bid' | null = null;
+
+      if (!prevPlayer.hasPassed && player.hasPassed) {
+        toastLabel = '포기 🏳️';
+        toastType = 'pass';
+      } else if (player.currentBid > prevPlayer.currentBid) {
+        toastLabel = `${player.currentBid.toLocaleString()}원 💰`;
+        toastType = 'bid';
+      }
+
+      if (toastLabel && toastType) {
+        toastCounterRef.current += 1;
+        newToasts[player.id] = { playerId: player.id, type: toastType, label: toastLabel, key: toastCounterRef.current };
+      }
+    });
+
+    if (Object.keys(newToasts).length > 0) {
+      setActionToasts((prev) => ({ ...prev, ...newToasts }));
+      Object.keys(newToasts).forEach((pid) => {
+        const key = newToasts[pid].key;
+        setTimeout(() => {
+          setActionToasts((prev) => {
+            if (prev[pid]?.key === key) {
+              const next = { ...prev };
+              delete next[pid];
+              return next;
+            }
+            return prev;
+          });
+        }, 2500);
+      });
     }
-  }, [gameState.currentBid]);
+
+    // Update prev snapshot
+    const snapshot: Record<string, { currentBid: number; hasPassed: boolean }> = {};
+    gameState.players.forEach((p) => {
+      snapshot[p.id] = { currentBid: p.currentBid, hasPassed: p.hasPassed };
+    });
+    prevPlayersRef.current = snapshot;
+  }, [gameState.players, currentPlayerId]);
+
+  const timeLeft = useTimeLeft(gameState.turnStartTime, gameState.turnTimeout);
 
   const me = gameState.players.find((p) => p.id === currentPlayerId);
   const opponents = gameState.players.filter((p) => p.id !== currentPlayerId);
@@ -187,19 +332,35 @@ export function Phase1Screen({
 
   const minBid = gameState.currentBid + 1000;
   const myEffectiveCoins = (me?.coins ?? 0) + (me?.currentBid ?? 0);
+  const canAffordMinBid = myEffectiveCoins >= minBid;
   const canBid = isMyTurn && bidAmount >= minBid && bidAmount <= myEffectiveCoins;
+  // 잔액 부족해도 포기는 항상 가능 (mustBid 제외)
   const canPass = isMyTurn && gameState.mustBidPlayer !== currentPlayerId;
   const isMustBid = gameState.mustBidPlayer === currentPlayerId;
 
-  // 라운드가 바뀌면 배팅 금액을 1000으로 초기화
+  // 라운드가 바뀌면 bidAmount를 최솟값으로 리셋
   useEffect(() => {
-    setBidAmount(1000);
+    if (gameState.roundNumber !== prevRoundRef.current) {
+      prevRoundRef.current = gameState.roundNumber;
+      setBidAmount(1000);
+    }
   }, [gameState.roundNumber]);
 
-  // Update bid input when min changes
+  // minBid가 올라가면 bidAmount도 따라 올라감
   useEffect(() => {
     setBidAmount((prev) => Math.max(prev, minBid));
   }, [minBid]);
+
+  // currentBid가 바뀌면 flash 애니메이션
+  useEffect(() => {
+    if (gameState.currentBid !== prevCurrentBidRef.current) {
+      prevCurrentBidRef.current = gameState.currentBid;
+      if (gameState.currentBid > 0) {
+        setBidFlash(true);
+        setTimeout(() => setBidFlash(false), 600);
+      }
+    }
+  }, [gameState.currentBid]);
 
   const adjustBid = (delta: number) => {
     setBidAmount((prev) => {
@@ -258,6 +419,86 @@ export function Phase1Screen({
         </div>
       )}
 
+      {/* My round result popup — 포기 or 낙찰 승리 */}
+      {(() => {
+        // 승리: activeRoundResult가 나
+        const isWin = activeRoundResult && activeRoundResult.winnerId === currentPlayerId;
+        // 포기: activePassEvent가 나
+        const isPass = activePassEvent && activePassEvent.playerId === currentPlayerId;
+
+        if (!isWin && !isPass) return null;
+
+        const isWinMode = !!isWin;
+        const card = isWinMode ? activeRoundResult!.wonCard : activePassEvent!.acquiredCard;
+        const cardData = card ? (JOB_DATA[card] || { title: '?', emoji: '❓', color: '#fff' }) : null;
+        const paid = isWinMode ? activeRoundResult!.paid : activePassEvent!.paid;
+        const refunded = isWinMode ? activeRoundResult!.refunded : activePassEvent!.refunded;
+        const netCost = paid - refunded;
+
+        return (
+          <div
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-50 w-[320px]"
+            style={{ animation: 'slideDown 0.3s ease-out' }}
+          >
+            <div className={`border-4 border-black rounded-2xl overflow-hidden shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] ${isWinMode ? 'bg-yellow-50' : 'bg-white'}`}>
+              {/* Header */}
+              <div className={`px-4 py-3 border-b-4 border-black flex items-center gap-2 ${isWinMode ? 'bg-yellow-400' : 'bg-red-400'}`}>
+                <span className="text-xl">{isWinMode ? '🏆' : '🏳️'}</span>
+                <p className="font-black text-base text-white">
+                  {isWinMode ? '낙찰 성공! 직업 카드 획득' : '포기! 직업 카드 획득'}
+                </p>
+              </div>
+
+              <div className="p-4 flex flex-col gap-3">
+                {/* Card */}
+                {cardData && card ? (
+                  <div
+                    className="flex items-center gap-3 border-4 border-black rounded-xl p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                    style={{ backgroundColor: cardData.color }}
+                  >
+                    <span className="text-4xl">{cardData.emoji}</span>
+                    <div>
+                      <div className="font-black text-slate-800 text-sm">{cardData.title}</div>
+                      <div className="font-bold text-slate-500 text-xs">카드 번호 {card}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="font-black text-slate-400 text-sm text-center">획득한 카드 없음</p>
+                )}
+
+                {/* Settlement */}
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wide">이번 라운드 정산</p>
+                  {paid > 0 ? (
+                    <>
+                      <div className="flex justify-between items-center bg-red-50 border-2 border-red-200 rounded-lg px-3 py-1.5">
+                        <span className="font-black text-xs text-slate-600">💸 지불한 금액</span>
+                        <span className="font-black text-sm text-red-600">-{paid.toLocaleString()}원</span>
+                      </div>
+                      {refunded > 0 && (
+                        <div className="flex justify-between items-center bg-green-50 border-2 border-green-200 rounded-lg px-3 py-1.5">
+                          <span className="font-black text-xs text-slate-600">💰 환급 금액</span>
+                          <span className="font-black text-sm text-green-600">+{refunded.toLocaleString()}원</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center bg-slate-100 border-2 border-slate-300 rounded-lg px-3 py-1.5">
+                        <span className="font-black text-xs text-slate-700">실제 지출</span>
+                        <span className="font-black text-sm text-slate-800">{netCost.toLocaleString()}원</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex justify-between items-center bg-slate-100 border-2 border-slate-300 rounded-lg px-3 py-1.5">
+                      <span className="font-black text-xs text-slate-700">실제 지출</span>
+                      <span className="font-black text-sm text-slate-800">0원</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Opponents area */}
       <div className="bg-slate-100 border-b-4 border-black p-4 flex justify-center gap-4 relative">
         <div className="absolute top-3 left-3">
@@ -286,6 +527,7 @@ export function Phase1Screen({
             const isTheirTurn = gameState.currentTurn === player.id;
             const pi = gameState.playerItems[player.id];
             const piMeta = pi?.item ? ITEM_META[pi.item] : null;
+            const toast = actionToasts[player.id];
             return (
               <div
                 key={player.id}
@@ -293,7 +535,31 @@ export function Phase1Screen({
                   player.hasPassed ? 'bg-slate-300 opacity-60' : 'bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
                 } ${isTheirTurn ? 'ring-4 ring-yellow-400 -translate-y-2' : ''}`}
               >
-                {isTheirTurn && (
+                {/* Action toast bubble */}
+                {toast && (
+                  <div
+                    key={toast.key}
+                    className={`absolute -top-10 left-1/2 -translate-x-1/2 z-30 whitespace-nowrap px-2.5 py-1 rounded-xl border-2 border-black font-black text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] pointer-events-none ${
+                      toast.type === 'pass'
+                        ? 'bg-red-400 text-white'
+                        : 'bg-green-400 text-white'
+                    }`}
+                    style={{ animation: 'toastPop 0.25s ease-out' }}
+                  >
+                    {toast.label}
+                    {/* Tail */}
+                    <span
+                      className={`absolute -bottom-[7px] left-1/2 -translate-x-1/2 w-0 h-0`}
+                      style={{
+                        borderLeft: '6px solid transparent',
+                        borderRight: '6px solid transparent',
+                        borderTop: `7px solid ${toast.type === 'pass' ? '#f87171' : '#4ade80'}`,
+                      }}
+                    />
+                  </div>
+                )}
+
+                {isTheirTurn && !toast && (
                   <span className="absolute -top-4 bg-yellow-400 border-2 border-black rounded-full px-2 py-0.5 text-[10px] font-black animate-bounce z-10">
                     고민 중...
                   </span>
@@ -340,7 +606,8 @@ export function Phase1Screen({
         {/* Current bid display */}
         {gameState.currentBid > 0 && (
           <div
-            className={`mt-4 bg-yellow-400 border-4 border-black rounded-2xl px-6 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${playBidAnimation ? 'phase1-bid-animate' : ''}`}
+            className="mt-4 bg-yellow-400 border-4 border-black rounded-2xl px-6 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+            style={bidFlash ? { animation: 'bidPop 0.5s ease-out' } : undefined}
           >
             <span className="font-black text-slate-800">현재 최고가: </span>
             <span className="font-black text-2xl">{gameState.currentBid.toLocaleString()}원</span>
@@ -392,71 +659,76 @@ export function Phase1Screen({
         )}
 
         {/* My info + bid controls */}
-        <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-          {/* My avatar & coins */}
-          <div className="flex items-center gap-3 bg-white border-4 border-black rounded-xl p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] min-w-[180px]">
-            <div className={`w-12 h-12 ${AVATAR_COLORS[playerIndex(currentPlayerId) % AVATAR_COLORS.length]} rounded-full border-4 border-black flex items-center justify-center text-xl`}>
-              {AVATARS[playerIndex(currentPlayerId) % AVATARS.length]}
+        <div className="flex flex-col gap-3">
+          <div className="flex items-stretch gap-3">
+            {/* My avatar & coins */}
+            <div className="flex items-center gap-3 bg-white border-4 border-black rounded-xl p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+              <div className={`w-10 h-10 flex-none ${AVATAR_COLORS[playerIndex(currentPlayerId) % AVATAR_COLORS.length]} rounded-full border-4 border-black flex items-center justify-center text-lg`}>
+                {AVATARS[playerIndex(currentPlayerId) % AVATARS.length]}
+              </div>
+              <div className="min-w-0">
+                <div className="font-black text-sm whitespace-nowrap">
+                  {me?.nickname} <span className="text-[10px] bg-blue-500 text-white px-1.5 py-0.5 rounded-full">나</span>
+                  {isMustBid && <span className="ml-1 text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded-full animate-pulse">필수베팅!</span>}
+                </div>
+                <div className="flex items-center gap-1 text-sm font-bold text-slate-600 whitespace-nowrap">
+                  <Coins className="w-3.5 h-3.5 text-yellow-500 flex-none" />
+                  {me?.coins.toLocaleString()}원
+                </div>
+                {(me?.currentBid ?? 0) > 0 && (
+                  <div className="text-xs font-bold text-blue-600 whitespace-nowrap">입찰: {me?.currentBid.toLocaleString()}원</div>
+                )}
+              </div>
             </div>
-            <div>
-              <div className="font-black text-base">
-                {me?.nickname} <span className="text-xs bg-blue-500 text-white px-1.5 py-0.5 rounded-full">나</span>
-                {isMustBid && <span className="ml-1 text-xs bg-red-500 text-white px-1.5 py-0.5 rounded-full animate-pulse">필수베팅!</span>}
-              </div>
-              <div className="flex items-center gap-1 text-sm font-bold text-slate-600">
-                <Coins className="w-4 h-4 text-yellow-500" />
-                {me?.coins.toLocaleString()}원
-              </div>
-              {(me?.currentBid ?? 0) > 0 && (
-                <div className="text-xs font-bold text-blue-600">입찰: {me?.currentBid.toLocaleString()}원</div>
+
+            {/* Bid / Pass controls */}
+            <div className="flex flex-col gap-2 flex-1">
+              {/* 잔액 부족 안내 */}
+              {isMyTurn && !canAffordMinBid && !isMustBid && (
+                <div className="bg-orange-100 border-2 border-orange-400 rounded-lg px-3 py-1.5 text-center">
+                  <span className="font-black text-xs text-orange-700">잔액 부족 — 포기를 선택하세요</span>
+                </div>
               )}
-            </div>
-          </div>
-
-          {/* My job cards */}
-          <div className="flex gap-1.5 overflow-x-auto hide-scrollbar pb-1 flex-1 max-w-xs">
-            {(me?.properties.length ?? 0) === 0 ? (
-              <span className="text-sm font-bold text-slate-400 self-center">획득한 직업 카드 없음</span>
-            ) : (
-              me?.properties.map((c) => <JobCard key={c} id={c} mini />)
-            )}
-          </div>
-
-          {/* Bid / Pass controls */}
-          <div className="flex flex-col gap-2 min-w-[240px]">
-            <div className="flex gap-2">
-              {/* Bid input */}
-              <div className="flex-1 flex bg-white border-4 border-black rounded-xl overflow-hidden shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+              <div className={`flex bg-white border-4 border-black rounded-xl overflow-hidden shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] ${isMyTurn && !canAffordMinBid ? 'opacity-40' : ''}`}>
                 <button
                   onClick={() => adjustBid(-1000)}
-                  disabled={!isMyTurn}
-                  className="px-3 bg-slate-200 hover:bg-slate-300 font-black text-lg disabled:opacity-40"
+                  disabled={!isMyTurn || !canAffordMinBid}
+                  className="px-3 bg-slate-200 hover:bg-slate-300 font-black text-lg disabled:opacity-40 disabled:cursor-not-allowed"
                 >-</button>
                 <div className="flex-1 text-center py-2 font-black text-sm">{bidAmount.toLocaleString()}</div>
                 <button
                   onClick={() => adjustBid(1000)}
-                  disabled={!isMyTurn}
-                  className="px-3 bg-slate-200 hover:bg-slate-300 font-black text-lg disabled:opacity-40"
+                  disabled={!isMyTurn || !canAffordMinBid}
+                  className="px-3 bg-slate-200 hover:bg-slate-300 font-black text-lg disabled:opacity-40 disabled:cursor-not-allowed"
                 >+</button>
               </div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => onBid(bidAmount)}
-                disabled={!canBid}
-                className="flex-1 py-3 bg-green-400 hover:bg-green-300 disabled:bg-slate-300 disabled:cursor-not-allowed border-4 border-black rounded-xl font-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all text-sm"
-              >
-                베팅하기 ({bidAmount.toLocaleString()})
-              </button>
-              <button
-                onClick={onPass}
-                disabled={!canPass}
-                className="flex-1 py-3 bg-red-400 hover:bg-red-300 disabled:bg-slate-300 disabled:cursor-not-allowed border-4 border-black rounded-xl font-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all text-sm"
-              >
-                {isMustBid ? '포기 불가!' : '포기'}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => onBid(bidAmount)}
+                  disabled={!canBid}
+                  className="flex-1 py-2.5 bg-green-400 hover:bg-green-300 disabled:bg-slate-300 disabled:cursor-not-allowed border-4 border-black rounded-xl font-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all text-sm"
+                >
+                  베팅 ({bidAmount.toLocaleString()})
+                </button>
+                <button
+                  onClick={onPass}
+                  disabled={!canPass}
+                  className={`flex-1 py-2.5 border-4 border-black rounded-xl font-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all text-sm ${
+                    isMustBid
+                      ? 'bg-slate-300 cursor-not-allowed'
+                      : isMyTurn && !canAffordMinBid
+                      ? 'bg-red-500 hover:bg-red-400 text-white animate-pulse'
+                      : 'bg-red-400 hover:bg-red-300 disabled:bg-slate-300 disabled:cursor-not-allowed'
+                  }`}
+                >
+                  {isMustBid ? '포기 불가!' : '포기'}
+                </button>
+              </div>
             </div>
           </div>
+
+          {/* My job cards */}
+          <JobCardScroller properties={me?.properties ?? []} />
         </div>
       </div>
     </div>

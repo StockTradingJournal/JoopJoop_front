@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { RefreshCw, Eye, Timer, HelpCircle, Check, X, ArrowRight } from 'lucide-react';
 import { GameState, Player, ItemType, PeekResult } from '../../lib/socket-types';
 
@@ -93,7 +93,7 @@ function JobCardMini({ id, isSelected = false, onClick }: { id: number; isSelect
     >
       <div className="absolute top-0.5 left-1 text-[8px] font-black opacity-60">{id}</div>
       <div className="flex-1 flex items-center justify-center text-lg drop-shadow">{JOB_EMOJIS[id] ?? '❓'}</div>
-      <div className="bg-white border-t-2 border-black text-[8px] font-black text-center py-0.5 truncate px-0.5">{id}번</div>
+      <div className="bg-white border-t-2 border-black text-[8px] font-black text-center py-0.5 truncate px-0.5">{id}</div>
     </div>
   );
 }
@@ -168,12 +168,13 @@ export function Phase2Screen({
   onUseItemPeek,
 }: Phase2ScreenProps) {
   const [showPeekSelect, setShowPeekSelect] = useState(false);
-  /** 제출 중인 카드: 손에서 중앙 보드로 날아가는 애니메이션용 */
   const [flyingCard, setFlyingCard] = useState<{ cardId: number } | null>(null);
 
-  /** Phase2 라운드 제한 시간(초). 서버에서도 동일 값(10)으로 설정해야 실제 종료 시점과 일치합니다. */
   const PHASE2_TIMEOUT_SECONDS = 10;
   const timeLeft = useTimeLeft(gameState.phase2StartTime, PHASE2_TIMEOUT_SECONDS);
+
+  const flyingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (flyingTimerRef.current) clearTimeout(flyingTimerRef.current); }, []);
 
   const me = gameState.players.find((p) => p.id === currentPlayerId);
   const opponents = gameState.players.filter((p) => p.id !== currentPlayerId);
@@ -192,7 +193,7 @@ export function Phase2Screen({
     if (!isSelecting || me?.hasSelected) return;
     setFlyingCard({ cardId });
     onPlayCard(cardId);
-    setTimeout(() => setFlyingCard(null), 850);
+    flyingTimerRef.current = setTimeout(() => setFlyingCard(null), 850);
   };
 
   const playerIndex = (id: string) => gameState.players.findIndex((p) => p.id === id);
@@ -333,7 +334,7 @@ export function Phase2Screen({
                 return (
                   <div key={p.id} className="flex flex-col items-center gap-1">
                     <div className="w-16 h-24 border-4 border-dashed border-slate-300 rounded-xl flex items-center justify-center bg-white/50">
-                      <span className="text-slate-400 font-bold text-[10px] text-center px-1">{p.nickname}<br />대기중</span>
+                      <span className="text-slate-400 font-bold text-[10px] text-center px-1">대기중</span>
                     </div>
                   </div>
                 );
@@ -346,7 +347,7 @@ export function Phase2Screen({
                       style={{ backgroundColor: JOB_COLORS[p.selectedProperty] ?? '#fff' }}
                     >
                       <div className="flex-1 flex items-center justify-center text-2xl">{JOB_EMOJIS[p.selectedProperty] ?? '?'}</div>
-                      <div className="bg-white border-t-2 border-black text-[9px] font-black text-center py-0.5">{p.selectedProperty}번</div>
+                      <div className="bg-white border-t-2 border-black text-[9px] font-black text-center py-0.5">{p.selectedProperty}</div>
                     </div>
                   ) : (
                     <div className="w-16 h-24 bg-slate-800 border-4 border-black rounded-xl flex items-center justify-center shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">

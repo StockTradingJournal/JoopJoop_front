@@ -1,4 +1,4 @@
-import { GameState, PeekResult } from '../../lib/socket-types';
+import { GameState, PeekResult, LastPassEvent, RoundResult } from '../../lib/socket-types';
 import { Phase1Screen } from './Phase1Screen';
 import { Phase2Screen } from './Phase2Screen';
 
@@ -6,6 +6,8 @@ interface GameContainerProps {
   gameState: GameState;
   currentPlayerId: string;
   activePeek: PeekResult | null;
+  activePassEvent: LastPassEvent | null;
+  activeRoundResult: RoundResult | null;
   onBid: (amount: number) => void;
   onPass: () => void;
   onPlayCard: (cardId: number) => void;
@@ -18,6 +20,8 @@ export function GameContainer({
   gameState,
   currentPlayerId,
   activePeek,
+  activePassEvent,
+  activeRoundResult,
   onBid,
   onPass,
   onPlayCard,
@@ -43,6 +47,8 @@ export function GameContainer({
       gameState={gameState}
       currentPlayerId={currentPlayerId}
       activePeek={activePeek}
+      activePassEvent={activePassEvent}
+      activeRoundResult={activeRoundResult}
       onBid={onBid}
       onPass={onPass}
       onUseItemReroll={onUseItemReroll}
