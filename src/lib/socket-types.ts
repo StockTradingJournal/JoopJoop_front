@@ -22,6 +22,28 @@ export interface PeekResult {
   realEstateCards?: number[];
 }
 
+export interface LastPassEvent {
+  playerId: string;
+  nickname: string;
+  /** Job card acquired by passing (lowest card on table) */
+  acquiredCard: number | null;
+  /** Amount that was bid before passing (already deducted) */
+  paid: number;
+  /** Amount refunded (half of paid, floored to 1000) */
+  refunded: number;
+}
+
+export interface RoundResult {
+  winnerId: string;
+  winnerNickname: string;
+  /** Highest job card won by the last bidder */
+  wonCard: number;
+  /** Amount paid (already deducted from coins) */
+  paid: number;
+  /** Amount refunded (always 0 for winner — only passers get refunds) */
+  refunded: number;
+}
+
 export interface PlayerRanking {
   playerId: string;
   nickname: string;
@@ -82,5 +104,9 @@ export interface GameState {
   phase2Timeout: number;
   /** Peek result — only present for the player who used peek */
   peekResult?: PeekResult | null;
+  /** Last pass event — present for one broadcast tick after someone passes */
+  lastPassEvent?: LastPassEvent | null;
+  /** Round result — present for one broadcast tick when a round winner is determined */
+  roundResult?: RoundResult | null;
   finalRankings?: PlayerRanking[];
 }

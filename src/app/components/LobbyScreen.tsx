@@ -185,13 +185,24 @@ export function LobbyScreen({
           </button>
 
           {me?.isHost ? (
-            <button
-              onClick={onStartGame}
-              disabled={!canStart}
-              className="flex-1 py-4 bg-green-400 disabled:bg-slate-300 disabled:cursor-not-allowed border-4 border-black rounded-xl font-black text-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all"
-            >
-              {canStart ? '아이템 선택으로 이동! →' : `${players.length}명 / 2명 이상 + 모두 준비 필요`}
-            </button>
+            <>
+              {players.length < 6 && (
+                <button
+                  onClick={() => gameSocket.addBot()}
+                  className="px-4 py-4 bg-purple-400 border-4 border-black rounded-xl font-black text-base shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all whitespace-nowrap"
+                  title="혼자 테스트할 때 사용하세요"
+                >
+                  🤖 봇 추가
+                </button>
+              )}
+              <button
+                onClick={onStartGame}
+                disabled={!canStart}
+                className="flex-1 py-4 bg-green-400 disabled:bg-slate-300 disabled:cursor-not-allowed border-4 border-black rounded-xl font-black text-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all"
+              >
+                {canStart ? '아이템 선택으로 이동! →' : `${players.length}명 / 2명 이상 + 모두 준비 필요`}
+              </button>
+            </>
           ) : (
             <button
               onClick={onReady}
