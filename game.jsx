@@ -528,8 +528,19 @@ const GamePhase1 = ({ initialPlayers, onComplete }) => {
             </div>
           </div>
 
-          <div className="flex gap-2 overflow-x-auto max-w-[250px] md:max-w-[350px] p-2 hide-scrollbar items-center">
-            {me.cards.length === 0 ? <span className="text-sm font-bold text-slate-400">획득한 카드 없음</span> : me.cards.map((c, i) => <JobCard key={i} cardId={c} isMini={true} />)}
+          <div className="flex flex-col gap-1 max-w-[250px] md:max-w-[350px] p-2">
+            <div className="flex gap-2 overflow-x-auto hide-scrollbar items-center">
+              {me.cards.length === 0 ? (
+                <span className="text-sm font-bold text-slate-400">획득한 카드 없음</span>
+              ) : (
+                me.cards.map((c, i) => <JobCard key={i} cardId={c} isMini={true} />)
+              )}
+            </div>
+            {me.cards.length > 0 && (
+              <div className="text-[10px] md:text-xs font-bold text-slate-600 truncate">
+                보유 번호: {me.cards.slice().sort((a, b) => a - b).join(', ')}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-2 min-w-[280px]">
@@ -803,8 +814,19 @@ const GamePhase2 = ({ initialPlayers, onComplete }) => {
             <div className="flex flex-col flex-1">
                <div className="font-black text-lg">{me.nickname} <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">나</span></div>
                <div className="text-sm font-bold text-slate-600 mb-1"><Coins className="w-4 h-4 text-yellow-500 inline mr-1" />{me.money.toLocaleString()}원</div>
-               <div className="flex gap-1 overflow-x-auto max-w-full pb-1 hide-scrollbar">
-                 {me.realEstates.length === 0 ? <span className="text-xs font-bold text-slate-400">부동산 없음</span> : me.realEstates.map((c, i) => <RealEstateCard key={`re-${i}`} cardId={c} isMini={true} />)}
+               <div className="flex flex-col gap-1 max-w-full pb-1">
+                 <div className="flex gap-1 overflow-x-auto hide-scrollbar">
+                   {me.realEstates.length === 0 ? (
+                     <span className="text-xs font-bold text-slate-400">부동산 없음</span>
+                   ) : (
+                     me.realEstates.map((c, i) => <RealEstateCard key={`re-${i}`} cardId={c} isMini={true} />)
+                   )}
+                 </div>
+                 {me.realEstates.length > 0 && (
+                   <div className="text-[10px] md:text-xs font-bold text-slate-600 truncate">
+                     보유 부동산 번호: {me.realEstates.slice().sort((a, b) => a - b).join(', ')} (총 {me.realEstates.reduce((sum, c) => sum + c * 1000, 0).toLocaleString()}원)
+                   </div>
+                 )}
                </div>
             </div>
           </div>

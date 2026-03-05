@@ -55,9 +55,10 @@ function JobCard({ id, mini = false, showPassBadge = false }: { id: number; mini
   if (mini) {
     return (
       <div
-        className="flex-none w-14 h-20 border-2 border-black rounded-lg flex flex-col overflow-hidden shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+        className="relative flex-none w-14 h-20 border-2 border-black rounded-lg flex flex-col overflow-hidden shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
         style={{ backgroundColor: d.color }}
       >
+        <div className="absolute top-0.5 left-1 text-[9px] font-black opacity-70">{id}</div>
         <div className="flex-1 flex items-center justify-center text-lg drop-shadow-sm">{d.emoji}</div>
         <div className="bg-white border-t-2 border-black text-[9px] font-black text-center truncate px-0.5 py-0.5 leading-none">{d.title}</div>
       </div>
