@@ -57,7 +57,7 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
               textShadow: '-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 6px 6px 0px rgba(0,0,0,1)',
             }}
           >
-            FOR SALE
+            JoopJoop
           </h1>
           <p className="text-base sm:text-lg font-bold text-slate-700 mt-0.5 sm:mt-1">영끌 로드</p>
         </div>
