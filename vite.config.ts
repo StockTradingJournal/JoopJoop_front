@@ -8,8 +8,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      // Share image assets from forsale_front
-      '@images': path.resolve(__dirname, '../forsale_front/src/app/components/image'),
+      // Share image assets from 
+      '@images': path.resolve(__dirname, '../src/app/components/image'),
     },
   },
 })
