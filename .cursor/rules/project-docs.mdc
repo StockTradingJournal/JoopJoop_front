@@ -1,0 +1,29 @@
+---
+description: JoopJoop 프론트엔드 개발 시 필수 참고 문서 (FRONTEND_SCREENS, GAME_RULES, STATE_MACHINE)
+alwaysApply: true
+---
+
+# 프로젝트 필수 문서 참조
+
+이 프로젝트에서 화면·로직·상태를 구현하거나 수정할 때는 아래 세 문서를 반드시 참고하세요.
+
+## 참고할 문서
+
+1. **FRONTEND_SCREENS.md** — 프론트엔드 화면 기획안
+   - GAME_RULES 기준 1단계/2단계/결과 화면 체크리스트
+   - Phase1Screen, Phase2Screen, ResultScreen 구현·검증 기준
+   - 개발 기준 기기: iPhone 13 mini (375×812 pt)
+
+2. **GAME_RULES.md** — 경매 게임 규칙 & 구현 가이드
+   - 용어 정의(참가자, 돈, 직업/부동산 카드, 라운드, 턴, 아이템 등)
+   - 게임 플로우, 1단계/2단계 룰, 아이템 규칙
+   - 프론트/백엔드 공통 기준
+
+3. **STATE_MACHINE.md** — 게임 상태 머신 및 이벤트
+   - Phase 상태 전이(Lobby → ItemSelection → Phase1 → Phase2 → Result)
+   - 서버/클라이언트 공통 phase, gameState, 이벤트 정의
+
+## 사용 방법
+
+- 새 화면·컴포넌트·이벤트를 만들 때: 위 문서를 읽고 요구사항·용어·상태를 맞춰 구현하세요.
+- 버그 수정·리팩터 시: 해당 화면/단계가 문서의 어떤 항목에 해당하는지 확인한 뒤 수정하세요.
