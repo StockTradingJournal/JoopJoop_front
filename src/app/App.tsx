@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { gameSocket } from '../lib/gameSocket';
 import { GameState, ItemType, PeekResult, LastPassEvent, RoundResult } from '../lib/socket-types';
+import { playBGM, pauseBGM, playPoint, playDingDong } from '../lib/audio';
 import { HomeScreen } from './components/HomeScreen';
 import { LobbyScreen } from './components/LobbyScreen';
 import { ItemSelectionScreen } from './components/ItemSelectionScreen';
@@ -20,6 +21,7 @@ export default function App() {
   const [activePassEvent, setActivePassEvent] = useState<LastPassEvent | null>(null);
   // Round result (shown when a bidding round ends with a winner)
   const [activeRoundResult, setActiveRoundResult] = useState<RoundResult | null>(null);
+  const prevPhase2AllSelectedRef = useRef(false);
 
   useEffect(() => {
     gameSocket.connect();
@@ -40,13 +42,22 @@ export default function App() {
       if (state.lastPassEvent) {
         setActivePassEvent(state.lastPassEvent);
         setTimeout(() => setActivePassEvent(null), 4000);
+        playPoint();
       }
 
-      // Handle round result
+      // Handle round result (낙찰 시 띵동)
       if (state.roundResult) {
         setActiveRoundResult(state.roundResult);
         setTimeout(() => setActiveRoundResult(null), 3500);
+        playDingDong();
       }
+
+      // Phase2: all players submitted — card reveal
+      if (state.phase === 'phase2_playing' && state.allPlayersSelected && !prevPhase2AllSelectedRef.current) {
+        playPoint();
+      }
+      prevPhase2AllSelectedRef.current =
+        state.phase === 'phase2_playing' ? state.allPlayersSelected : false;
 
       // Screen transitions
       if (state.phase === 'game_over') {
@@ -80,6 +91,7 @@ export default function App() {
     setActivePeek(null);
     setActivePassEvent(null);
     setActiveRoundResult(null);
+    pauseBGM();
   }, []);
 
   const handleCreateRoom = async (nickname: string) => {
@@ -91,6 +103,7 @@ export default function App() {
       const { roomId } = await gameSocket.createRoom(nickname);
       setRoomCode(roomId);
       setCurrentScreen('lobby');
+      playBGM();
     } catch {
       alert('방 생성에 실패했습니다.');
     }
@@ -105,6 +118,7 @@ export default function App() {
       await gameSocket.joinRoom(code, nickname);
       setRoomCode(code);
       setCurrentScreen('lobby');
+      playBGM();
     } catch {
       alert('방 참가에 실패했습니다. 방 코드를 확인해주세요.');
     }
