@@ -20,6 +20,8 @@ export interface PeekResult {
   money?: number;
   /** Phase 2: target's real estate cards */
   realEstateCards?: number[];
+  /** Phase 2: target's most expensive job card */
+  topJobCard?: number | null;
 }
 
 export interface LastPassEvent {
