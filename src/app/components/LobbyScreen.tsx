@@ -35,11 +35,11 @@ export function LobbyScreen({
 
   const me = players.find((p) => p.id === currentPlayerId);
   const allNonHostReady = players.filter((p) => !p.isHost).every((p) => p.isReady);
-  const canStart = me?.isHost && players.length >= 2 && allNonHostReady;
+  const canStart = me?.isHost && players.length >= 3 && allNonHostReady;
 
   useEffect(() => {
     const handler = (data: ChatMessage) => {
-      setChatMessages((prev) => [...prev, data]);
+      setChatMessages((prev) => [...prev.slice(-19), data]);
     };
     gameSocket.onChatMessage(handler);
     return () => gameSocket.offChatMessage(handler);
@@ -98,7 +98,7 @@ export function LobbyScreen({
           <h3 className="font-black text-base sm:text-lg mb-3 sm:mb-4 border-b-2 sm:border-b-4 border-black pb-1.5 sm:pb-2 flex items-center gap-1.5 sm:gap-2">
             <Users className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" /> 참여자 ({players.length}/6)
           </h3>
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <div className="grid grid-cols-3 grid-rows-2 gap-2 sm:gap-3">
             {players.map((player, idx) => {
               const isMe = player.id === currentPlayerId;
               const color = AVATAR_COLORS[idx % AVATAR_COLORS.length];
@@ -106,7 +106,7 @@ export function LobbyScreen({
               return (
                 <div
                   key={player.id}
-                  className={`flex flex-col items-center p-2 sm:p-3 border-2 sm:border-4 border-black rounded-lg sm:rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all min-w-0 ${
+                  className={`flex flex-col items-center p-2 sm:p-3 border-2 sm:border-4 border-black rounded-lg sm:rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all min-w-0 min-h-[7rem] sm:min-h-[7.5rem] ${
                     player.isReady || player.isHost ? 'bg-green-50' : 'bg-white'
                   } ${isMe ? 'ring-2 sm:ring-4 ring-blue-400' : ''}`}
                 >
@@ -130,7 +130,7 @@ export function LobbyScreen({
             })}
             {/* Empty slots */}
             {Array.from({ length: Math.max(0, 6 - players.length) }).map((_, i) => (
-              <div key={`empty-${i}`} className="flex flex-col items-center p-2 sm:p-3 border-2 sm:border-4 border-dashed border-slate-300 rounded-lg sm:rounded-xl min-w-0">
+              <div key={`empty-${i}`} className="flex flex-col items-center p-2 sm:p-3 border-2 sm:border-4 border-dashed border-slate-300 rounded-lg sm:rounded-xl min-w-0 min-h-[7rem] sm:min-h-[7.5rem]">
                 <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-full border-2 sm:border-4 border-dashed border-slate-300 flex items-center justify-center text-lg sm:text-2xl mb-1 sm:mb-2 text-slate-300 flex-shrink-0">
                   ?
                 </div>
@@ -141,8 +141,8 @@ export function LobbyScreen({
         </div>
 
         {/* Chat */}
-        <div className="bg-white border-2 sm:border-4 border-black rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] mb-3 sm:mb-4 flex-1 min-h-0 flex flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto mb-2 space-y-1">
+        <div className="bg-white border-2 sm:border-4 border-black rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] mb-3 sm:mb-4 flex flex-col">
+          <div className="h-[10.5rem] sm:h-[16rem] md:h-[20rem] overflow-y-auto mb-2 space-y-1 flex-shrink-0 overflow-x-hidden">
             {chatMessages.length === 0 ? (
               <p className="text-slate-400 text-xs sm:text-sm italic text-center py-2 sm:py-3">채팅 메시지가 없습니다</p>
             ) : (
@@ -157,41 +157,35 @@ export function LobbyScreen({
               </>
             )}
           </div>
-          <div className="flex gap-2 flex-shrink-0 mt-auto">
-  <input
-    type="text"
-    value={chatInput}
-    onChange={(e) => {
-      // onChange에서는 복잡한 로직 없이 값을 그대로 업데이트합니다.
-      // 리액트가 내부적으로 한글 조합을 처리하도록 두는 것이 가장 안전합니다.
-      setChatInput(e.target.value);
-    }}
-    onKeyDown={(e) => {
-      // [핵심] 한글 조합 중(Enter로 조합을 끝내는 경우 포함)일 때는 
-      // sendChat이 실행되지 않도록 막아줍니다.
-      if (e.nativeEvent.isComposing) return;
-
-      if (e.key === 'Enter') {
-        e.preventDefault(); // 엔터 입력 시 기본 동작(줄바꿈 등) 방지
-        sendChat();
-      }
-    }}
-    placeholder="메시지를 입력하세요..."
-    maxLength={100}
-    className="flex-1 min-h-[44px] px-3 py-2 rounded-lg sm:rounded-xl bg-slate-100 border-2 sm:border-4 border-black text-sm font-semibold focus:outline-none min-w-0"
-  />
-  <button
-    onClick={sendChat}
-    disabled={!chatInput.trim()}
-    className="min-h-[44px] min-w-[44px] flex items-center justify-center bg-blue-400 rounded-lg sm:rounded-xl border-2 sm:border-4 border-black disabled:bg-slate-200 disabled:cursor-not-allowed shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:brightness-110 touch-manipulation flex-shrink-0"
-  >
-    <Send className="w-4 h-4" />
-  </button>
-</div>
+          <div className="flex gap-2 flex-shrink-0 mt-auto relative z-10">
+            <input
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing) return;
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  sendChat();
+                }
+              }}
+              placeholder="메시지를 입력하세요..."
+              maxLength={100}
+              className="flex-1 min-h-[44px] px-3 py-2 rounded-lg sm:rounded-xl bg-slate-100 border-2 sm:border-4 border-black text-sm font-semibold focus:outline-none min-w-0"
+            />
+            <button
+              type="button"
+              onClick={sendChat}
+              disabled={!chatInput.trim()}
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center bg-blue-400 rounded-lg sm:rounded-xl border-2 sm:border-4 border-black disabled:bg-slate-200 disabled:cursor-not-allowed shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:brightness-110 touch-manipulation flex-shrink-0"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Controls */}
-        <div className="flex flex-wrap gap-2 sm:gap-3 flex-shrink-0">
+        <div className="flex flex-wrap gap-2 sm:gap-3 flex-shrink-0 relative z-10">
           <button
             onClick={() => { playClick(); onLeaveRoom(); }}
             className="min-h-[48px] px-4 sm:px-6 py-3 sm:py-4 bg-slate-200 border-2 sm:border-4 border-black rounded-lg sm:rounded-xl font-black text-sm sm:text-base shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all touch-manipulation"
@@ -215,7 +209,11 @@ export function LobbyScreen({
                 disabled={!canStart}
                 className="min-h-[48px] flex-1 min-w-0 py-3 sm:py-4 px-3 bg-green-400 disabled:bg-slate-300 disabled:cursor-not-allowed border-2 sm:border-4 border-black rounded-lg sm:rounded-xl font-black text-base sm:text-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all touch-manipulation"
               >
-                {canStart ? '아이템 선택으로 이동! →' : `${players.length}명 / 2명 이상 + 모두 준비 필요`}
+                {players.length <= 2
+                  ? '게임은 3명부터 가능'
+                  : allNonHostReady
+                    ? '게임 시작!'
+                    : '모든 플레이어 준비 필요'}
               </button>
             </>
           ) : (
