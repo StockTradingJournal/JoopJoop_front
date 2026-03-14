@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Music2, Volume2, VolumeX } from 'lucide-react';
+import { Music2, Volume2, VolumeX, SlidersHorizontal } from 'lucide-react';
 import { gameSocket } from '../lib/gameSocket';
 import { GameState, ItemType, PeekResult, LastPassEvent, RoundResult } from '../lib/socket-types';
 import { playBGM, pauseBGM, playPoint, playDingDong, isBGMMuted, isSFXMuted, setBGMMuted, setSFXMuted } from '../lib/audio';
@@ -97,6 +97,8 @@ export default function App() {
   const prevPhase2AllSelectedRef = useRef(false);
   const [bgmMuted, setBgmMuted] = useState(() => isBGMMuted());
   const [sfxMuted, setSfxMuted] = useState(() => isSFXMuted());
+  const [soundPanelOpen, setSoundPanelOpen] = useState(false);
+  const soundPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isDevPhase2) return;
@@ -318,26 +320,53 @@ export default function App() {
     setSfxMuted(next);
   };
 
+  // 패널 밖 클릭 시 사운드 패널 닫기
+  useEffect(() => {
+    if (!soundPanelOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (soundPanelRef.current && !soundPanelRef.current.contains(e.target as Node)) {
+        setSoundPanelOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [soundPanelOpen]);
+
   return (
     <div className="size-full min-h-screen">
-      {/* 사운드 온/오프: 우측 상단 고정 */}
-      <div className="fixed top-3 right-3 z-[9998] flex items-center gap-1.5 bg-white/95 border-2 border-black rounded-xl px-2 py-1.5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+      {/* 사운드 온/오프: 상단 가운데 고정, 작은 버튼 하나만 노출, 탭 시 패널 펼침 */}
+      <div ref={soundPanelRef} className="fixed top-2 left-1/2 -translate-x-1/2 z-[9998] flex flex-col items-center gap-1.5" style={{ top: 'max(0.5rem, env(safe-area-inset-top))' }}>
         <button
           type="button"
-          onClick={handleToggleBGM}
-          title={bgmMuted ? 'BGM 켜기' : 'BGM 끄기'}
-          className={`p-1.5 rounded-lg border-2 border-black transition-colors touch-manipulation ${bgmMuted ? 'bg-slate-200 text-slate-500' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'}`}
+          onClick={() => setSoundPanelOpen((o) => !o)}
+          title="소리 설정"
+          className="w-8 h-8 flex items-center justify-center rounded-full bg-white/95 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-slate-50 active:scale-95 touch-manipulation"
         >
-          <Music2 className="w-5 h-5" />
+          <SlidersHorizontal className="w-4 h-4 text-slate-700" />
         </button>
-        <button
-          type="button"
-          onClick={handleToggleSFX}
-          title={sfxMuted ? '효과음 켜기' : '효과음 끄기'}
-          className={`p-1.5 rounded-lg border-2 border-black transition-colors touch-manipulation ${sfxMuted ? 'bg-slate-200 text-slate-500' : 'bg-blue-100 text-blue-800 hover:bg-blue-200'}`}
-        >
-          {sfxMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-        </button>
+        {soundPanelOpen && (
+          <div className="bg-white/98 border-2 border-black rounded-xl px-3 py-2.5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-2 min-w-[130px]">
+            <div className="text-[10px] font-black text-slate-500 uppercase tracking-wide">소리</div>
+            <button
+              type="button"
+              onClick={handleToggleBGM}
+              className={`flex items-center gap-2 w-full rounded-lg border-2 border-black px-2.5 py-1.5 text-left text-sm font-bold transition-colors touch-manipulation ${bgmMuted ? 'bg-slate-200 text-slate-500' : 'bg-amber-100 text-amber-800'}`}
+            >
+              <Music2 className="w-4 h-4 flex-shrink-0" />
+              <span>BGM</span>
+              <span className="ml-auto text-xs">{bgmMuted ? '끔' : '켜짐'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleToggleSFX}
+              className={`flex items-center gap-2 w-full rounded-lg border-2 border-black px-2.5 py-1.5 text-left text-sm font-bold transition-colors touch-manipulation ${sfxMuted ? 'bg-slate-200 text-slate-500' : 'bg-blue-100 text-blue-800'}`}
+            >
+              {sfxMuted ? <VolumeX className="w-4 h-4 flex-shrink-0" /> : <Volume2 className="w-4 h-4 flex-shrink-0" />}
+              <span>효과음</span>
+              <span className="ml-auto text-xs">{sfxMuted ? '끔' : '켜짐'}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {isDevPhase2 && (
