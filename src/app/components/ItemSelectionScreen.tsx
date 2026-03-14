@@ -209,7 +209,7 @@ export function ItemSelectionScreen({
               <h3 className="font-black text-xs sm:text-base mb-2 sm:mb-3 border-b-2 border-dashed border-slate-300 pb-1.5 sm:pb-2">
                 다른 플레이어 선택 현황
               </h3>
-              <div className="flex gap-2 sm:gap-4 flex-nowrap overflow-x-auto pb-1 -mx-1 overflow-y-visible">
+              <div className={`grid gap-2 sm:gap-4 ${players.length <= 3 ? 'grid-cols-3' : 'grid-cols-3 grid-rows-2'}`}>
                 {players.map((player, idx) => {
                   const isMe = player.id === currentPlayerId;
                   const pi = playerItems[player.id];
@@ -218,7 +218,7 @@ export function ItemSelectionScreen({
                   const color = AVATAR_COLORS[idx % AVATAR_COLORS.length];
                   const avatar = AVATARS[idx % AVATARS.length];
                   return (
-                    <div key={player.id} className={`flex flex-col items-center gap-0.5 sm:gap-1 p-2 sm:p-3 rounded-lg sm:rounded-xl border-2 border-black shrink-0 min-w-[72px] sm:min-w-0 ${isMe ? 'bg-blue-50 border-blue-400' : 'bg-slate-50'}`}>
+                    <div key={player.id} className={`flex flex-col items-center gap-0.5 sm:gap-1 p-2 sm:p-3 rounded-lg sm:rounded-xl border-2 border-black min-w-0 ${isMe ? 'bg-blue-50 border-blue-400' : 'bg-slate-50'}`}>
                       <div className={`relative w-9 h-9 sm:w-12 sm:h-12 ${color} rounded-full border-2 sm:border-[3px] border-black flex items-center justify-center text-base sm:text-xl`}>
                         {avatar}
                         {chosen && chosenDef && (
