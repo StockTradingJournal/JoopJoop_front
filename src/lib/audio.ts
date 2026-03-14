@@ -7,6 +7,36 @@
 const BASE = typeof import.meta.env?.BASE_URL === 'string' ? import.meta.env.BASE_URL : '/';
 const AUDIO = (name: string) => `${BASE}audio/${name}`;
 
+const STORAGE_KEY_BGM = 'joop_bgm_muted';
+const STORAGE_KEY_SFX = 'joop_sfx_muted';
+
+function getStoredBgmMuted(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY_BGM) === 'true';
+  } catch { return false; }
+}
+function getStoredSfxMuted(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY_SFX) === 'true';
+  } catch { return false; }
+}
+
+let bgmMuted = getStoredBgmMuted();
+let sfxMuted = getStoredSfxMuted();
+
+export function isBGMMuted(): boolean { return bgmMuted; }
+export function isSFXMuted(): boolean { return sfxMuted; }
+
+export function setBGMMuted(muted: boolean): void {
+  bgmMuted = muted;
+  try { localStorage.setItem(STORAGE_KEY_BGM, String(muted)); } catch { /* ignore */ }
+  if (muted) pauseBGM();
+}
+
+export function setSFXMuted(muted: boolean): void {
+  sfxMuted = muted;
+  try { localStorage.setItem(STORAGE_KEY_SFX, String(muted)); } catch { /* ignore */ }
+}
 
 // ── Web Audio Context (싱글톤) ─────────────────────────────────────────────
 
@@ -23,7 +53,7 @@ function resumeContext(): void {
   if (ctx?.state === 'suspended') ctx.resume().catch(() => {});
 }
 
-// ── BGM: 60bpm 베이스 루프 (Web Audio) ───────────────────────────────────────
+// ── BGM: 파일(bgm.mp3 / bgm.wav) 우선, 없으면 60bpm 베이스 루프 ─────────────────
 
 const BPM = 60;
 const BEAT_DURATION = 60 / BPM; // 1초
@@ -35,6 +65,7 @@ const BGM_GAIN = 0.18;
 let bgmGain: GainNode | null = null;
 let bgmNextStartTime = 0;
 let bgmScheduled = false;
+let bgmAudio: HTMLAudioElement | null = null; // 파일 BGM 재생 중일 때
 
 function scheduleBassLoop(): void {
   const ctx = getAudioContext();
@@ -57,25 +88,51 @@ function scheduleBassLoop(): void {
   }, Math.max(0, timeUntilNextLoop));
 }
 
+function playBGMFromOscillator(): void {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(BGM_GAIN, ctx.currentTime);
+  gain.connect(ctx.destination);
+  bgmGain = gain;
+  bgmScheduled = true;
+  scheduleBassLoop();
+}
+
 export function playBGM(): void {
   try {
+    if (bgmMuted) return;
     resumeContext();
-    const ctx = getAudioContext();
-    if (!ctx) return;
-    if (bgmOscillator || bgmGain) return; // 이미 재생 중
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(BGM_GAIN, ctx.currentTime);
-    gain.connect(ctx.destination);
-    bgmGain = gain;
-    bgmScheduled = true;
-    scheduleBassLoop();
+    if (bgmAudio || bgmGain) return; // 이미 재생 중
+
+    // 1) 파일 BGM 시도: bgm.mp3 → bgm.wav (없으면 오실레이터)
+    const tryFile = (filename: string, next: () => void) => {
+      const audio = new Audio(AUDIO(filename));
+      audio.volume = BGM_GAIN;
+      audio.loop = true;
+      audio.addEventListener('canplaythrough', () => {
+        if (bgmAudio || bgmGain) return;
+        audio.play().then(() => { bgmAudio = audio; }).catch(next);
+      }, { once: true });
+      audio.addEventListener('error', next, { once: true });
+      audio.load();
+    };
+
+    tryFile('bgm.mp3', () => {
+      tryFile('bgm.wav', () => playBGMFromOscillator());
+    });
   } catch {
-    // ignore
+    playBGMFromOscillator();
   }
 }
 
 export function pauseBGM(): void {
   try {
+    if (bgmAudio) {
+      bgmAudio.pause();
+      bgmAudio.currentTime = 0;
+      bgmAudio = null;
+    }
     bgmScheduled = false;
     bgmGain = null;
     bgmNextStartTime = 0;
@@ -87,6 +144,9 @@ export function pauseBGM(): void {
 export function setBGMVolume(volume: number): void {
   try {
     const v = Math.max(0, Math.min(1, volume));
+    if (bgmAudio) {
+      bgmAudio.volume = v * BGM_GAIN;
+    }
     if (bgmGain) {
       const ctx = getAudioContext();
       if (ctx) bgmGain.gain.setValueAtTime(v * BGM_GAIN, ctx.currentTime);
@@ -99,6 +159,7 @@ export function setBGMVolume(volume: number): void {
 // ── 타이머 틱 (1초마다, 마지막 3초는 긴장 버전) ─────────────────────────────
 
 export function playTick(isUrgent: boolean): void {
+  if (sfxMuted) return;
   const ctx = getAudioContext();
   if (!ctx) return;
   resumeContext();
@@ -121,6 +182,7 @@ const C5 = 523.25;
 const E5 = 659.25;
 
 export function playDingDong(): void {
+  if (sfxMuted) return;
   const ctx = getAudioContext();
   if (!ctx) return;
   resumeContext();
@@ -149,6 +211,7 @@ export function playDingDong(): void {
 // ── 입찰 완료 도장 (쾅) ─────────────────────────────────────────────────────
 
 export function playStamp(): void {
+  if (sfxMuted) return;
   const ctx = getAudioContext();
   if (!ctx) return;
   resumeContext();
@@ -178,6 +241,7 @@ function createNoiseBuffer(ctx: AudioContext, durationSeconds: number): AudioBuf
 // ── 돈 더 쓸 때 ATM (드르륵 + 툭) ───────────────────────────────────────────
 
 export function playATM(): void {
+  if (sfxMuted) return;
   const ctx = getAudioContext();
   if (!ctx) return;
   resumeContext();
@@ -217,6 +281,7 @@ export function playATM(): void {
 // ── 리롤 신문/전단지 넘기는 소리 ───────────────────────────────────────────
 
 export function playPaperRustle(): void {
+  if (sfxMuted) return;
   const ctx = getAudioContext();
   if (!ctx) return;
   resumeContext();
@@ -244,6 +309,7 @@ export function playPaperRustle(): void {
 const G5 = 783.99;
 
 export function playFanfare(): void {
+  if (sfxMuted) return;
   const ctx = getAudioContext();
   if (!ctx) return;
   resumeContext();
@@ -279,6 +345,7 @@ function playOneShot(filename: string, volume = 0.7): void {
 }
 
 export function playClick(): void {
+  if (sfxMuted) return;
   playOneShot('click.mp3');
 }
 
@@ -286,6 +353,7 @@ const pointDebounceMs = 500;
 let lastPointTime = 0;
 
 export function playPoint(): void {
+  if (sfxMuted) return;
   const now = Date.now();
   if (now - lastPointTime < pointDebounceMs) return;
   lastPointTime = now;

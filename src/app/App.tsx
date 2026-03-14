@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Music2, Volume2, VolumeX } from 'lucide-react';
 import { gameSocket } from '../lib/gameSocket';
 import { GameState, ItemType, PeekResult, LastPassEvent, RoundResult } from '../lib/socket-types';
-import { playBGM, pauseBGM, playPoint, playDingDong } from '../lib/audio';
+import { playBGM, pauseBGM, playPoint, playDingDong, isBGMMuted, isSFXMuted, setBGMMuted, setSFXMuted } from '../lib/audio';
 import { HomeScreen } from './components/HomeScreen';
 import { LobbyScreen } from './components/LobbyScreen';
 import { ItemSelectionScreen } from './components/ItemSelectionScreen';
@@ -94,6 +95,8 @@ export default function App() {
   // Round result (shown when a bidding round ends with a winner)
   const [activeRoundResult, setActiveRoundResult] = useState<RoundResult | null>(null);
   const prevPhase2AllSelectedRef = useRef(false);
+  const [bgmMuted, setBgmMuted] = useState(() => isBGMMuted());
+  const [sfxMuted, setSfxMuted] = useState(() => isSFXMuted());
 
   useEffect(() => {
     if (isDevPhase2) return;
@@ -303,8 +306,40 @@ export default function App() {
     });
   };
 
+  const handleToggleBGM = () => {
+    const next = !bgmMuted;
+    setBGMMuted(next);
+    setBgmMuted(next);
+    if (!next && (currentScreen === 'lobby' || currentScreen === 'game')) playBGM();
+  };
+  const handleToggleSFX = () => {
+    const next = !sfxMuted;
+    setSFXMuted(next);
+    setSfxMuted(next);
+  };
+
   return (
     <div className="size-full min-h-screen">
+      {/* 사운드 온/오프: 우측 상단 고정 */}
+      <div className="fixed top-3 right-3 z-[9998] flex items-center gap-1.5 bg-white/95 border-2 border-black rounded-xl px-2 py-1.5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+        <button
+          type="button"
+          onClick={handleToggleBGM}
+          title={bgmMuted ? 'BGM 켜기' : 'BGM 끄기'}
+          className={`p-1.5 rounded-lg border-2 border-black transition-colors touch-manipulation ${bgmMuted ? 'bg-slate-200 text-slate-500' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'}`}
+        >
+          <Music2 className="w-5 h-5" />
+        </button>
+        <button
+          type="button"
+          onClick={handleToggleSFX}
+          title={sfxMuted ? '효과음 켜기' : '효과음 끄기'}
+          className={`p-1.5 rounded-lg border-2 border-black transition-colors touch-manipulation ${sfxMuted ? 'bg-slate-200 text-slate-500' : 'bg-blue-100 text-blue-800 hover:bg-blue-200'}`}
+        >
+          {sfxMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+        </button>
+      </div>
+
       {isDevPhase2 && (
         <div className="fixed top-0 left-0 right-0 z-[9999] flex flex-col">
           {/* Toggle tab */}
