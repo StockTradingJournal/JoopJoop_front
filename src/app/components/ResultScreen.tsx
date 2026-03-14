@@ -191,17 +191,6 @@ export function ResultScreen({ rankings, currentPlayerId, onBackToHome }: Result
           })}
         </div>
 
-        {/* Score explanation: 모바일 압축 */}
-        <div className="bg-white border-2 sm:border-4 border-black rounded-xl sm:rounded-2xl p-2.5 sm:p-4 mb-1 sm:mb-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-          <h3 className="font-black text-xs sm:text-base mb-1 sm:mb-2 flex items-center gap-1.5 sm:gap-2">
-            <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-500 shrink-0" />
-            점수 계산 방식
-          </h3>
-          <p className="font-bold text-[10px] sm:text-sm text-slate-600 leading-snug">
-            최종 자산 = 잔여 현금 + 부동산 가치 (카드번호×1,000원)
-          </p>
-        </div>
-
         <button
           onClick={() => { playClick(); onBackToHome(); }}
           className="w-full py-3.5 sm:py-5 bg-blue-400 hover:bg-blue-300 text-black border-2 sm:border-4 border-black rounded-lg sm:rounded-xl font-black text-base sm:text-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 sm:active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2"
