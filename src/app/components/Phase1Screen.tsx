@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { RefreshCw, Eye, ArrowLeftRight, Timer, Coins, HelpCircle, X } from 'lucide-react';
 import { GameState, Player, ItemType, PeekResult, LastPassEvent, RoundResult } from '../../lib/socket-types';
+import { playClick, playTick, playStamp, playATM, playPaperRustle } from '../../lib/audio';
 
 // ── Action Toast types ───────────────────────────────────────────────────────
 interface ActionToast {
@@ -350,6 +351,17 @@ export function Phase1Screen({
   }, [gameState.players, currentPlayerId]);
 
   const timeLeft = useTimeLeft(gameState.turnStartTime, gameState.turnTimeout);
+  const prevTimeLeftRef = useRef<number>(timeLeft);
+
+  // 타이머 1초마다 틱 사운드 (마지막 3초는 긴장 버전). 남은 초가 줄어들 때만 재생.
+  useEffect(() => {
+    if (timeLeft <= 0 || timeLeft > gameState.turnTimeout) return;
+    if (prevTimeLeftRef.current !== timeLeft) {
+      const prev = prevTimeLeftRef.current;
+      prevTimeLeftRef.current = timeLeft;
+      if (timeLeft < prev) playTick(timeLeft <= 3);
+    }
+  }, [timeLeft, gameState.turnTimeout]);
 
   const me = gameState.players.find((p) => p.id === currentPlayerId);
   const opponents = gameState.players.filter((p) => p.id !== currentPlayerId);
@@ -473,6 +485,8 @@ export function Phase1Screen({
 
   const handleUseItem = (type: ItemType) => {
     if (!isMyTurn || !myItem || myItem.item !== type || myItem.used) return;
+    if (type === 'reroll') playPaperRustle();
+    else playClick();
     if (type === 'reroll') onUseItemReroll();
     else if (type === 'peek') setShowPeekSelect(true);
     else if (type === 'reverse') onUseItemReverse();
@@ -503,7 +517,7 @@ export function Phase1Screen({
         <PeekModal
           phase1={true}
           opponents={opponents}
-          onSelect={(id) => { setShowPeekSelect(false); onUseItemPeek(id); }}
+          onSelect={(id) => { playClick(); setShowPeekSelect(false); onUseItemPeek(id); }}
           onCancel={() => setShowPeekSelect(false)}
         />
       )}
@@ -877,8 +891,6 @@ export function Phase1Screen({
               )}
             </div>
           </div>
-
-          {/* Bid / Pass controls */}
           <div className="flex flex-col gap-1.5 flex-1">
             {isMyTurn && !canAffordMinBid && !isMustBid && (
               <div className="bg-orange-100 border border-orange-400 rounded-lg px-2 py-1 text-center">
@@ -893,21 +905,21 @@ export function Phase1Screen({
               >-</button>
               <div className="flex-1 text-center py-1.5 font-black text-xs">{bidAmount.toLocaleString()}</div>
               <button
-                onClick={() => adjustBid(1000)}
+                onClick={() => { playATM(); adjustBid(1000); }}
                 disabled={!isMyTurn || !canAffordMinBid}
                 className="px-2.5 bg-slate-200 hover:bg-slate-300 font-black text-base disabled:opacity-40 disabled:cursor-not-allowed"
               >+</button>
             </div>
             <div className="flex gap-1.5">
               <button
-                onClick={() => onBid(bidAmount)}
+                onClick={() => { playStamp(); onBid(bidAmount); }}
                 disabled={!canBid}
                 className="flex-1 py-2 bg-green-400 hover:bg-green-300 disabled:bg-slate-300 disabled:cursor-not-allowed border-2 border-black rounded-lg font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all text-xs"
               >
                 베팅 ({bidAmount.toLocaleString()})
               </button>
               <button
-                onClick={onPass}
+                onClick={() => { playClick(); onPass(); }}
                 disabled={!canPass}
                 className={`flex-1 py-2 border-2 border-black rounded-lg font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all text-xs ${
                   isMustBid

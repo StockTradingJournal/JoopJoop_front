@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Home, Medal, Crown, Trophy, ChevronDown, ChevronUp } from 'lucide-react';
 import { PlayerRanking } from '../../lib/socket-types';
+import { playClick, playFanfare } from '../../lib/audio';
 
 const INITIAL_CARDS_VISIBLE = 4;
 
@@ -44,6 +45,17 @@ function MedalIcon({ rank }: { rank: number }) {
 
 export function ResultScreen({ rankings, currentPlayerId, onBackToHome }: ResultScreenProps) {
   const [expandedPlayerIds, setExpandedPlayerIds] = useState<Set<string>>(new Set());
+  const fanfarePlayedRef = useRef(false);
+
+  // 1등일 때 팡파르 1회만 재생
+  useEffect(() => {
+    if (fanfarePlayedRef.current || !rankings.length) return;
+    const isFirst = rankings[0]?.playerId === currentPlayerId;
+    if (isFirst) {
+      fanfarePlayedRef.current = true;
+      playFanfare();
+    }
+  }, [rankings, currentPlayerId]);
 
   const toggleCardsExpanded = (playerId: string) => {
     setExpandedPlayerIds((prev) => {
@@ -191,7 +203,7 @@ export function ResultScreen({ rankings, currentPlayerId, onBackToHome }: Result
         </div>
 
         <button
-          onClick={onBackToHome}
+          onClick={() => { playClick(); onBackToHome(); }}
           className="w-full py-3.5 sm:py-5 bg-blue-400 hover:bg-blue-300 text-black border-2 sm:border-4 border-black rounded-lg sm:rounded-xl font-black text-base sm:text-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 sm:active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2"
         >
           <Home className="w-5 h-5 sm:w-6 sm:h-6" />

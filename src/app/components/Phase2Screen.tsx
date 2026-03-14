@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { RefreshCw, Eye, Timer, HelpCircle, Check, X } from 'lucide-react';
 import { GameState, Player, ItemType, PeekResult } from '../../lib/socket-types';
+import { playClick, playTick, playPaperRustle } from '../../lib/audio';
 
 // ── Real estate card data ────────────────────────────────────────────────────
 const REAL_ESTATE_DATA: Record<number, { title: string; emoji: string; color: string }> = {
@@ -250,6 +251,17 @@ export function Phase2Screen({
 
   const PHASE2_TIMEOUT_SECONDS = 10;
   const timeLeft = useTimeLeft(gameState.phase2StartTime, PHASE2_TIMEOUT_SECONDS);
+  const prevTimeLeftRef = useRef<number>(timeLeft);
+
+  // 타이머 1초마다 틱 사운드 (마지막 3초는 긴장 버전)
+  useEffect(() => {
+    if (timeLeft <= 0 || timeLeft > PHASE2_TIMEOUT_SECONDS) return;
+    if (prevTimeLeftRef.current !== timeLeft) {
+      const prev = prevTimeLeftRef.current;
+      prevTimeLeftRef.current = timeLeft;
+      if (timeLeft < prev) playTick(timeLeft <= 3);
+    }
+  }, [timeLeft, PHASE2_TIMEOUT_SECONDS]);
 
 
   const me = gameState.players.find((p) => p.id === currentPlayerId);
@@ -261,12 +273,14 @@ export function Phase2Screen({
   const canPeek = !myItem?.used && myItem?.item === 'peek' && isSelecting;
 
   const handleUseItem = (type: ItemType) => {
-    if (type === 'reroll' && canReroll) onUseItemReroll();
-    else if (type === 'peek' && canPeek) setShowPeekSelect(true);
+    if (type === 'reroll' && canReroll) { playPaperRustle(); onUseItemReroll(); }
+    else if (type === 'peek' && canPeek) { playClick(); setShowPeekSelect(true); }
   };
 
   const handlePlayCard = (cardId: number) => {
     if (!isSelecting || me?.hasSelected) return;
+    playClick();
+    setFlyingCard({ cardId });
     onPlayCard(cardId);
   };
 
@@ -286,7 +300,7 @@ export function Phase2Screen({
       {showPeekSelect && (
         <PeekModal
           opponents={opponents}
-          onSelect={(id) => { setShowPeekSelect(false); onUseItemPeek(id); }}
+          onSelect={(id) => { playClick(); setShowPeekSelect(false); onUseItemPeek(id); }}
           onCancel={() => setShowPeekSelect(false)}
         />
       )}

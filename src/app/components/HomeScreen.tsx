@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { User, PlusCircle, KeyRound, Home, LogIn } from 'lucide-react';
+import { playClick } from '../../lib/audio';
 
 interface HomeScreenProps {
   onCreateRoom: (nickname: string) => void;
@@ -18,12 +19,14 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
 
   const handleCreate = () => {
     if (!nickname.trim()) { showError('닉네임을 먼저 입력해주세요!'); return; }
+    playClick();
     onCreateRoom(nickname.trim());
   };
 
   const handleJoin = () => {
     if (!nickname.trim()) { showError('닉네임을 먼저 입력해주세요!'); return; }
     if (roomCode.trim().length < 4) { showError('올바른 방 코드를 입력해주세요!'); return; }
+    playClick();
     onJoinRoom(nickname.trim(), roomCode.trim());
   };
 

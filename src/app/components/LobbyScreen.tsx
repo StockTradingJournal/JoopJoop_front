@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Users, Crown, CheckCircle2, Send, Copy, Check } from 'lucide-react';
 import { gameSocket } from '../../lib/gameSocket';
 import { Player } from '../../lib/socket-types';
+import { playClick } from '../../lib/audio';
 
 const AVATARS = ['🧑', '👩', '🧔', '👱', '🧕', '👴'];
 const AVATAR_COLORS = [
@@ -192,7 +193,7 @@ export function LobbyScreen({
         {/* Controls */}
         <div className="flex flex-wrap gap-2 sm:gap-3 flex-shrink-0">
           <button
-            onClick={onLeaveRoom}
+            onClick={() => { playClick(); onLeaveRoom(); }}
             className="min-h-[48px] px-4 sm:px-6 py-3 sm:py-4 bg-slate-200 border-2 sm:border-4 border-black rounded-lg sm:rounded-xl font-black text-sm sm:text-base shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all touch-manipulation"
           >
             나가기
@@ -202,7 +203,7 @@ export function LobbyScreen({
             <>
               {players.length < 6 && (
                 <button
-                  onClick={() => gameSocket.addBot()}
+                  onClick={() => { playClick(); gameSocket.addBot(); }}
                   className="min-h-[48px] px-3 sm:px-4 py-3 sm:py-4 bg-purple-400 border-2 sm:border-4 border-black rounded-lg sm:rounded-xl font-black text-sm sm:text-base shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all whitespace-nowrap touch-manipulation"
                   title="혼자 테스트할 때 사용하세요"
                 >
@@ -210,7 +211,7 @@ export function LobbyScreen({
                 </button>
               )}
               <button
-                onClick={onStartGame}
+                onClick={() => { playClick(); onStartGame(); }}
                 disabled={!canStart}
                 className="min-h-[48px] flex-1 min-w-0 py-3 sm:py-4 px-3 bg-green-400 disabled:bg-slate-300 disabled:cursor-not-allowed border-2 sm:border-4 border-black rounded-lg sm:rounded-xl font-black text-base sm:text-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all touch-manipulation"
               >
@@ -219,7 +220,7 @@ export function LobbyScreen({
             </>
           ) : (
             <button
-              onClick={onReady}
+              onClick={() => { playClick(); onReady(); }}
               className={`min-h-[48px] flex-1 min-w-0 py-3 sm:py-4 border-2 sm:border-4 border-black rounded-lg sm:rounded-xl font-black text-base sm:text-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all touch-manipulation ${
                 me?.isReady ? 'bg-red-400' : 'bg-green-400'
               }`}

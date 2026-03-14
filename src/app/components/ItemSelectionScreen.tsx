@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { RefreshCw, Eye, ArrowLeftRight, CheckCircle2, Clock } from 'lucide-react';
 import { Player, PlayerItem, ItemType } from '../../lib/socket-types';
+import { playClick } from '../../lib/audio';
 
 const ITEM_SELECTION_TIME_LIMIT = 15; // 초
 
@@ -118,6 +119,7 @@ export function ItemSelectionScreen({
 
   const handleSelect = (id: ItemType) => {
     if (alreadySelected) return;
+    playClick();
     setSelected(id);
     onSelectItem(id);
   };
