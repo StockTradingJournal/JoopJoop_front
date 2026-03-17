@@ -280,7 +280,20 @@ export default function App() {
     setGameState((prev) => {
       if (!prev) return prev;
       const nextRound = prev.phase2RoundNumber + 1;
-      return buildDevState(devPlayerCount, nextRound);
+      const newState = buildDevState(devPlayerCount, nextRound);
+      // 이전 라운드에서 내가 선택한 카드가 있으면 부동산 획득 시뮬레이션
+      const myPrev = prev.players.find((p) => p.id === DEV_PHASE2_MOCK_ID);
+      const wonCard = myPrev?.selectedProperty ?? prev.currentRealEstateCards[0] ?? null;
+      const prevRealEstate = myPrev?.realEstateCards ?? [];
+      const newRealEstate = wonCard && !prevRealEstate.includes(wonCard)
+        ? [...prevRealEstate, wonCard]
+        : prevRealEstate;
+      const updatedPlayers = newState.players.map((p) =>
+        p.id === DEV_PHASE2_MOCK_ID
+          ? { ...p, realEstateCards: newRealEstate, realEstateCount: newRealEstate.length }
+          : p,
+      );
+      return { ...newState, players: updatedPlayers };
     });
   };
 

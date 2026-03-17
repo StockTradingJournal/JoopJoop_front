@@ -227,6 +227,16 @@ interface Phase2ScreenProps {
   onUseItemPeek: (targetId: string) => void;
 }
 
+// 부동산 카드 획득 애니메이션 타입 (Phase1의 winFly와 동일 구조)
+interface EstateWinFly {
+  cardId: number;
+  startX: number;
+  startY: number;
+  flyX: string;
+  flyY: string;
+  phase: 'shine' | 'fly';
+}
+
 export function Phase2Screen({
   gameState,
   currentPlayerId,
@@ -239,6 +249,18 @@ export function Phase2Screen({
   // roundKey: 라운드가 바뀔 때마다 부동산 카드를 리마운트해 애니메이션 재실행
   const [roundKey, setRoundKey] = useState(gameState.phase2RoundNumber);
   const prevRound = useRef(gameState.phase2RoundNumber);
+  // 공개 애니메이션: allPlayersSelected가 true가 되는 순간 각 플레이어 카드에 순차 애니메이션
+  const [revealedPlayers, setRevealedPlayers] = useState<Set<string>>(new Set());
+  const prevAllSelectedRef = useRef(gameState.allPlayersSelected);
+  const revealTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // 부동산 카드 획득 shine→fly 애니메이션
+  const [estateWinFly, setEstateWinFly] = useState<EstateWinFly | null>(null);
+  const estateWinFlyTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const prevRealEstateCardsRef = useRef<number[]>(
+    gameState.players.find((p) => p.id === currentPlayerId)?.realEstateCards ?? []
+  );
+  // 내 부동산 카운트 뱃지 ref (fly 목적지)
+  const myEstateBadgeRef = useRef<HTMLSpanElement>(null);
 
   const deckRef = useRef<HTMLDivElement>(null);
 
@@ -246,8 +268,57 @@ export function Phase2Screen({
     if (gameState.phase2RoundNumber !== prevRound.current) {
       prevRound.current = gameState.phase2RoundNumber;
       setRoundKey(gameState.phase2RoundNumber);
+      setRevealedPlayers(new Set());
+      prevAllSelectedRef.current = false;
     }
   }, [gameState.phase2RoundNumber]);
+
+  // 전원 제출 완료 시 각 플레이어 카드를 순차적으로 공개 애니메이션
+  useEffect(() => {
+    if (!gameState.allPlayersSelected || prevAllSelectedRef.current) return;
+    prevAllSelectedRef.current = true;
+    revealTimersRef.current.forEach(clearTimeout);
+    revealTimersRef.current = [];
+    const newRevealed = new Set<string>();
+    gameState.players.forEach((player, i) => {
+      const t = setTimeout(() => {
+        newRevealed.add(player.id);
+        setRevealedPlayers(new Set(newRevealed));
+      }, i * 150);
+      revealTimersRef.current.push(t);
+    });
+    return () => revealTimersRef.current.forEach(clearTimeout);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState.allPlayersSelected]);
+
+  // 내 realEstateCards가 새로 추가될 때 획득 애니메이션 실행
+  useEffect(() => {
+    const me = gameState.players.find((p) => p.id === currentPlayerId);
+    const current = me?.realEstateCards ?? [];
+    const prev = prevRealEstateCardsRef.current;
+    const newCards = current.filter((c) => !prev.includes(c));
+    prevRealEstateCardsRef.current = current;
+    if (newCards.length === 0) return;
+
+    const cardId = newCards[newCards.length - 1];
+    estateWinFlyTimersRef.current.forEach(clearTimeout);
+    estateWinFlyTimersRef.current = [];
+
+    const badgeEl = myEstateBadgeRef.current;
+    const flyX = badgeEl
+      ? `${badgeEl.getBoundingClientRect().left + badgeEl.getBoundingClientRect().width / 2 - window.innerWidth / 2}px`
+      : '0px';
+    const flyY = badgeEl
+      ? `${badgeEl.getBoundingClientRect().top + badgeEl.getBoundingClientRect().height / 2 - window.innerHeight / 2}px`
+      : '0px';
+
+    setEstateWinFly({ cardId, startX: window.innerWidth / 2, startY: window.innerHeight / 2, flyX, flyY, phase: 'shine' });
+    estateWinFlyTimersRef.current.push(
+      setTimeout(() => setEstateWinFly((p) => p ? { ...p, phase: 'fly' } : null), 1200),
+      setTimeout(() => { setEstateWinFly(null); estateWinFlyTimersRef.current = []; }, 2000),
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState.players, currentPlayerId]);
 
   const PHASE2_TIMEOUT_SECONDS = 10;
   const timeLeft = useTimeLeft(gameState.phase2StartTime, PHASE2_TIMEOUT_SECONDS);
@@ -280,7 +351,6 @@ export function Phase2Screen({
   const handlePlayCard = (cardId: number) => {
     if (!isSelecting || me?.hasSelected) return;
     playClick();
-    setFlyingCard({ cardId });
     onPlayCard(cardId);
   };
 
@@ -304,6 +374,64 @@ export function Phase2Screen({
           onCancel={() => setShowPeekSelect(false)}
         />
       )}
+
+      {/* 부동산 카드 획득 shine→fly 오버레이 (Phase1의 winFly와 동일 패턴) */}
+      {estateWinFly && (() => {
+        const d = REAL_ESTATE_DATA[estateWinFly.cardId] || { title: '?', emoji: '❓', color: '#fff' };
+        const isShine = estateWinFly.phase === 'shine';
+        const value = estateWinFly.cardId * 1000;
+        return (
+          <>
+            {/* shine 단계: 화면 중앙에 크게 표시 */}
+            {isShine && (
+              <div
+                className="fixed inset-0 z-[65] flex items-center justify-center pointer-events-none"
+                style={{ animation: 'cardWinShine 0.6s ease-out forwards' }}
+              >
+                <div className="flex flex-col items-center gap-3">
+                  <span className="font-black text-xl animate-bounce text-yellow-400 drop-shadow-lg">
+                    🏠 부동산 획득!
+                  </span>
+                  <div
+                    className="relative w-28 h-40 border-4 border-black rounded-2xl flex flex-col overflow-hidden shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
+                    style={{ backgroundColor: d.color }}
+                  >
+                    <div className="absolute top-1 right-2 bg-black text-white font-black text-[9px] px-1.5 py-0.5 rounded-full">#{estateWinFly.cardId}</div>
+                    <div className="flex-1 flex items-center justify-center text-5xl pt-2">{d.emoji}</div>
+                    <div className="bg-white border-t-[3px] border-black px-1 flex flex-col items-center justify-center rounded-b-xl py-1 shrink-0">
+                      <span className="font-black text-[10px] text-center leading-snug">{d.title}</span>
+                      <span className="font-black text-blue-600 text-[11px]">{value.toLocaleString()}원</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* fly 단계: 중앙에서 내 부동산 뱃지로 날아감 */}
+            {!isShine && (
+              <div
+                className="fixed z-[70] pointer-events-none"
+                style={{
+                  left: estateWinFly.startX - 40,
+                  top: estateWinFly.startY - 56,
+                  width: 80,
+                  height: 112,
+                  '--fly-x': estateWinFly.flyX,
+                  '--fly-y': estateWinFly.flyY,
+                  animation: 'cardFlyToBtn 0.7s cubic-bezier(0.4, 0, 0.8, 0.6) forwards',
+                } as React.CSSProperties}
+              >
+                <div
+                  className="w-full h-full border-4 border-black rounded-2xl flex flex-col overflow-hidden shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]"
+                  style={{ backgroundColor: d.color }}
+                >
+                  <div className="flex-1 flex items-center justify-center text-3xl pt-1">{d.emoji}</div>
+                  <div className="bg-white border-t-2 border-black text-[9px] font-black text-center py-0.5 truncate px-0.5">{d.title}</div>
+                </div>
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* Peek result toast */}
       {activePeek && (
@@ -503,12 +631,13 @@ export function Phase2Screen({
               const idx = playerIndex(player.id);
               const isMe = player.id === currentPlayerId;
               const submitted = player.hasSelected;
+              const isRevealed = revealedPlayers.has(player.id);
               return (
                 <div key={player.id} className="flex flex-col items-center gap-1 flex-1">
                   {/* 제출 카드 or 대기 슬롯 — 항상 고정 크기 */}
                   {gameState.allPlayersSelected && player.selectedProperty ? (
                     <div
-                      className="w-9 h-[3.5rem] border-2 border-black rounded-lg flex flex-col overflow-hidden shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                      className={`w-9 h-[3.5rem] border-2 border-black rounded-lg flex flex-col overflow-hidden shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]${isRevealed ? ' phase2-card-reveal' : ''}`}
                       style={{ backgroundColor: JOB_COLORS[player.selectedProperty] ?? '#fff' }}
                     >
                       <div className="flex-1 flex items-center justify-center text-sm">{JOB_EMOJIS[player.selectedProperty] ?? '?'}</div>
@@ -594,7 +723,7 @@ export function Phase2Screen({
             <div className={`w-9 h-9 ${AVATAR_COLORS[playerIndex(currentPlayerId) % AVATAR_COLORS.length]} rounded-full border-2 border-black flex items-center justify-center text-lg`}>
               {AVATARS[playerIndex(currentPlayerId) % AVATARS.length]}
             </div>
-            <span className="text-[9px] font-black text-slate-500">🏠 {me?.realEstateCount ?? 0}장</span>
+            <span ref={myEstateBadgeRef} className="text-[9px] font-black text-slate-500">🏠 {me?.realEstateCount ?? 0}장</span>
           </div>
 
           {/* Card selection area */}
@@ -614,7 +743,7 @@ export function Phase2Screen({
                   {(me?.properties.length ?? 0) === 0 ? (
                     <span className="text-xs font-bold text-slate-400 self-center py-2">보유 카드 없음</span>
                   ) : (
-                    me?.properties.map((c) => (
+                    [...(me?.properties ?? [])].sort((a, b) => a - b).map((c) => (
                       <JobCardMini
                         key={c}
                         id={c}
