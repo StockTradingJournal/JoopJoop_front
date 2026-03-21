@@ -1,8 +1,8 @@
 import { io, Socket } from 'socket.io-client';
 import { GameState, ItemType } from './socket-types';
 
-const BACKEND_URL = 'https://joopjoop-backend.onrender.com/';
-// const BACKEND_URL = 'http://localhost:8000/';
+// const BACKEND_URL = 'https://joopjoop-backend.onrender.com/';
+const BACKEND_URL = 'http://localhost:8000/';
 
 class GameSocket {
   private socket: Socket | null = null;
@@ -81,6 +81,48 @@ class GameSocket {
 
   leaveRoom() {
     this.socket?.emit('leave_room', {});
+  }
+
+  /** Reset room from game over to lobby (same players). Fails if not in game over. */
+  returnToLobby(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket) return reject(new Error('Not connected'));
+      const onOk = () => {
+        this.socket?.off('room:error', onErr);
+        resolve();
+      };
+      const onErr = (err: { code?: string; message?: string }) => {
+        if (err?.code !== 'RETURN_LOBBY_FAILED') return;
+        this.socket?.off('room:state', onOk);
+        reject(new Error(err?.message ?? '대기실로 돌아갈 수 없습니다.'));
+      };
+      // Register before emit — server may broadcast immediately
+      this.socket.once('room:state', onOk);
+      this.socket.on('room:error', onErr);
+      this.socket.emit('return_to_lobby', {});
+    });
+  }
+
+  /** Quick match queue (3–6 players). Server broadcasts room:state when matched. */
+  joinMatchQueue(playerCount: number, nickname: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket) return reject(new Error('Not connected'));
+      this.socket.emit('join_match_queue', { playerCount, nickname });
+      const onJoined = () => {
+        this.socket?.off('match_queue:error', onErr);
+        resolve();
+      };
+      const onErr = (err: { message?: string }) => {
+        this.socket?.off('match_queue:joined', onJoined);
+        reject(new Error(err?.message ?? '매칭 대기 실패'));
+      };
+      this.socket.once('match_queue:joined', onJoined);
+      this.socket.once('match_queue:error', onErr);
+    });
+  }
+
+  leaveMatchQueue(): void {
+    this.socket?.emit('leave_match_queue', {});
   }
 
   // ── Phase 1 actions ──────────────────────────────────────

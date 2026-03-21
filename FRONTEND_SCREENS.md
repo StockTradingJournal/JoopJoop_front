@@ -7,7 +7,22 @@
 ## 기준 문서
 
 - **규칙 정의**: [GAME_RULES.md](./GAME_RULES.md) — 용어, 경매 룰, 아이템, 상태 설계
-- **구현 위치**: `JoopJoop_front/src/app/components/` — Phase1Screen, Phase2Screen, ResultScreen
+- **구현 위치**: `JoopJoop_front/src/app/components/` — HomeScreen, RoomSelectionScreen, HelpScreen, LobbyScreen, ItemSelectionScreen, Phase1Screen, Phase2Screen, ResultScreen
+
+---
+
+## 진입·로비 흐름
+
+| 화면 | 컴포넌트 | UI / 동작 |
+|------|-----------|-----------|
+| **초기 로비** | `HomeScreen` | 닉네임 입력, **입장하기**만. 입장 시 `room_selection`으로 이동. |
+| **방 참가 메뉴** | `RoomSelectionScreen` | **방 만들기** → `create_room` → 게임 대기(`LobbyScreen`). **코드로 입장하기** → 팝업에서 코드 입력 후 `join_room` → 게임 대기. **빠른 참가** → 인원(3~6) 선택 팝업 → 확인 후 `join_match_queue` → 대기 중 오버레이(스피너·매칭 취소). 인원이 모이면 서버가 `item_selection`부터 시작 → **게임 대기 생략**. **도움말** → `HelpScreen`(다단계 페이지). |
+| **도움말** | `HelpScreen` | 목표 → 1단계 → 2단계 → 아이템, 이전/다음·인디케이터·마지막에 닫기. |
+| **게임 대기** | `LobbyScreen` | 방 코드, 참가자, 채팅, 준비/시작(기존과 동일). |
+
+팝업은 메인 카드 위 반투명 백드롭(`z-40`)으로 덮어 시각적 계층을 구분한다. 토스트 에러는 더 높은 `z-index`를 사용한다.
+
+**나가기 / 결과 돌아가기**: `App.tsx`의 `leaveToRoomMenu`. **`room:destroyed`(방 파괴)**: `handleRoomDestroyed`에서 `applyRoomMenuOnly`로 **`room_selection`** 복귀 후, 상단 **배너**로만 안내한다(`window.alert` 미사용 — 알림 닫기 클릭이 뒤 UI로 전파되는 문제 방지). **닉네임은 유지**. 초기 로비(`home`)는 방 참가 메뉴에서 뒤로(로그아웃, `resetToHome`)일 때만.
 
 ---
 
@@ -86,14 +101,17 @@
 **규칙 준수**
 
 - GAME_RULES § 결과 화면: "부동산 총액 + 남은 돈" 합산 순위 — 현재 `PlayerRanking` 구조와 일치.
+- 하단 버튼: `continueLabel` + `onContinue` — 비공개 방은 **계속하기**(`return_to_lobby`), 빠른 참가는 **다시 매칭하기**(동일 인원 큐 재진입).
 
 ---
 
 ## 화면 전환 (App.tsx)
 
-- **로비** → 방장 게임 시작 → **아이템 선택** → **1단계** → **2단계** → **결과**
-- 서버 `phase` / `gameState`에 따라 `item_selection`, `playing`, `game_over`로 화면 전환.
-- 결과 화면에서 "로비로 돌아가기" 시 홈(`home`)으로 이동.
+- **home**(닉네임) → **room_selection**(방 참가 메뉴) → **lobby**(게임 대기) 또는 **help** 또는 매칭 완료 시 곧바로 **item_selection**
+- 게임 대기에서 방장 시작 → **item_selection** → **1단계**(`game` / `phase1_bidding`) → **2단계**(`phase2_playing`) → **결과**(`game_over`)
+- **결과**에서 **계속하기**: 방 만들기·코드 입장으로 들어온 경우 `return_to_lobby`로 같은 방 **lobby** 복귀 / **빠른 참가**로 들어온 경우 방 이탈 후 **동일 인원**으로 매칭 큐 재진입(`다시 매칭하기`).
+- 서버 `phase` 우선순위: `game_over` → `item_selection` → `lobby` → 그 외 `gameState === 'playing'`(1·2단계).
+- 로비·게임·결과에서 **나가기** 또는 **방 파괴** 시 `room_selection`으로 복귀(닉네임 유지). **`home`**(닉네임 재입력)은 방 참가 메뉴에서 뒤로가기(`resetToHome`)일 때만.
 
 ---
 
