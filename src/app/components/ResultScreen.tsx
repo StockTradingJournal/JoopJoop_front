@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Home, Medal, Crown, Trophy, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowRight, Medal, Crown, ChevronDown, ChevronUp } from 'lucide-react';
 import { PlayerRanking } from '../../lib/socket-types';
 import { playClick, playFanfare } from '../../lib/audio';
 
@@ -32,7 +32,9 @@ const AVATARS = ['🧑', '👩', '🧔', '👱', '🧕', '👴'];
 interface ResultScreenProps {
   rankings: PlayerRanking[];
   currentPlayerId: string;
-  onBackToHome: () => void;
+  /** 예: 비공개 방「계속하기」, 빠른 참가「다시 매칭하기」 */
+  continueLabel: string;
+  onContinue: () => void;
 }
 
 function MedalIcon({ rank }: { rank: number }) {
@@ -43,7 +45,7 @@ function MedalIcon({ rank }: { rank: number }) {
   return <span className="font-black text-slate-600 text-base sm:text-xl w-6 sm:w-8 text-center">{rank}</span>;
 }
 
-export function ResultScreen({ rankings, currentPlayerId, onBackToHome }: ResultScreenProps) {
+export function ResultScreen({ rankings, currentPlayerId, continueLabel, onContinue }: ResultScreenProps) {
   const [expandedPlayerIds, setExpandedPlayerIds] = useState<Set<string>>(new Set());
   const fanfarePlayedRef = useRef(false);
 
@@ -192,11 +194,11 @@ export function ResultScreen({ rankings, currentPlayerId, onBackToHome }: Result
         </div>
 
         <button
-          onClick={() => { playClick(); onBackToHome(); }}
+          onClick={() => { playClick(); onContinue(); }}
           className="w-full py-3.5 sm:py-5 bg-blue-400 hover:bg-blue-300 text-black border-2 sm:border-4 border-black rounded-lg sm:rounded-xl font-black text-base sm:text-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 sm:active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2"
         >
-          <Home className="w-5 h-5 sm:w-6 sm:h-6" />
-          로비로 돌아가기
+          <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6" />
+          {continueLabel}
         </button>
       </div>
     </div>

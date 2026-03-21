@@ -4,12 +4,16 @@ import { gameSocket } from '../lib/gameSocket';
 import { GameState, ItemType, PeekResult, LastPassEvent, RoundResult } from '../lib/socket-types';
 import { playBGM, pauseBGM, playPoint, playDingDong, isBGMMuted, isSFXMuted, setBGMMuted, setSFXMuted } from '../lib/audio';
 import { HomeScreen } from './components/HomeScreen';
+import { RoomSelectionScreen } from './components/RoomSelectionScreen';
+import { HelpScreen } from './components/HelpScreen';
 import { LobbyScreen } from './components/LobbyScreen';
 import { ItemSelectionScreen } from './components/ItemSelectionScreen';
 import { GameContainer } from './components/GameContainer';
 import { ResultScreen } from './components/ResultScreen';
 
-type Screen = 'home' | 'lobby' | 'item_selection' | 'game' | 'result';
+type Screen = 'home' | 'room_selection' | 'help' | 'lobby' | 'item_selection' | 'game' | 'result';
+
+type JoinSource = 'private' | 'quick';
 
 // ── Dev mode: ?devPhase=2 로 Phase2 화면 바로 테스트 ──────────────────────────
 const DEV_PHASE2_MOCK_ID = 'dev-player-1';
@@ -99,108 +103,137 @@ export default function App() {
   const [sfxMuted, setSfxMuted] = useState(() => isSFXMuted());
   const [soundPanelOpen, setSoundPanelOpen] = useState(false);
   const soundPanelRef = useRef<HTMLDivElement>(null);
-
+  const [nickname, setNickname] = useState('');
+  const nicknameRef = useRef(nickname);
   useEffect(() => {
-    if (isDevPhase2) return;
-
-    gameSocket.connect();
-
-    const handleRoomState = (state: GameState) => {
-      setGameState(state);
-
-      const socketId = gameSocket.getSocket()?.id;
-      if (socketId) setCurrentPlayerId(socketId);
-
-      // Handle peek result (private)
-      if (state.peekResult) {
-        setActivePeek(state.peekResult);
-        setTimeout(() => setActivePeek(null), 4000);
-      }
-
-      // Handle pass event
-      if (state.lastPassEvent) {
-        setActivePassEvent(state.lastPassEvent);
-        setTimeout(() => setActivePassEvent(null), 4000);
-        playPoint();
-      }
-
-      // Handle round result (낙찰 시 띵동)
-      if (state.roundResult) {
-        setActiveRoundResult(state.roundResult);
-        setTimeout(() => setActiveRoundResult(null), 3500);
-        playDingDong();
-      }
-
-      // Phase2: all players submitted — card reveal
-      if (state.phase === 'phase2_playing' && state.allPlayersSelected && !prevPhase2AllSelectedRef.current) {
-        playPoint();
-      }
-      prevPhase2AllSelectedRef.current =
-        state.phase === 'phase2_playing' ? state.allPlayersSelected : false;
-
-      // Screen transitions
-      if (state.phase === 'game_over') {
-        setCurrentScreen('result');
-      } else if (state.phase === 'item_selection') {
-        setCurrentScreen('item_selection');
-      } else if (state.gameState === 'playing') {
-        setCurrentScreen('game');
-      }
-    };
-
-    const handleRoomDestroyed = (data: { message: string }) => {
-      alert(data.message || '방이 파괴되었습니다.');
-      resetToHome();
-    };
-
-    gameSocket.onRoomState(handleRoomState);
-    gameSocket.onRoomDestroyed(handleRoomDestroyed);
-
-    return () => {
-      gameSocket.offRoomState(handleRoomState);
-      gameSocket.offRoomDestroyed(handleRoomDestroyed);
-    };
-  }, []);
+    nicknameRef.current = nickname;
+  }, [nickname]);
+  const [isMatchmaking, setIsMatchmaking] = useState(false);
+  /** 방 만들기/코드 입장 vs 빠른 참가 — 결과 화면「계속하기」분기 */
+  const [joinSource, setJoinSource] = useState<JoinSource | null>(null);
+  /** 빠른 참가 시 선택한 인원(재매칭 시 동일 값 사용) */
+  const [quickMatchPlayerCount, setQuickMatchPlayerCount] = useState<number | null>(null);
+  /** 방 파괴 알림 — `window.alert` 대비(닫기 클릭이 뒤 버튼으로 전파되어 홈으로 가는 이슈 방지) */
+  const [roomDestroyedBanner, setRoomDestroyedBanner] = useState<string | null>(null);
+  /** false면 `room:state` 무시 — 나가기 직후 지연 패킷이 로비로 되돌리는 것 방지 */
+  const acceptRoomStateRef = useRef(false);
 
   const resetToHome = useCallback(() => {
+    gameSocket.leaveMatchQueue();
     setCurrentScreen('home');
     setRoomCode('');
     setCurrentPlayerId('');
     setGameState(null);
+    setNickname('');
+    setIsMatchmaking(false);
+    setJoinSource(null);
+    setQuickMatchPlayerCount(null);
+    setActivePeek(null);
+    setActivePassEvent(null);
+    setActiveRoundResult(null);
+    pauseBGM();
+    acceptRoomStateRef.current = false;
+    setRoomDestroyedBanner(null);
+  }, []);
+
+  /** 방 참가 메뉴 UI로만 복귀 (소켓 leave 없음 — 방 파괴 알림 등) */
+  const applyRoomMenuOnly = useCallback(() => {
+    acceptRoomStateRef.current = false;
+    setCurrentScreen('room_selection');
+    setRoomCode('');
+    setCurrentPlayerId('');
+    setGameState(null);
+    setIsMatchmaking(false);
+    setJoinSource(null);
+    setQuickMatchPlayerCount(null);
     setActivePeek(null);
     setActivePassEvent(null);
     setActiveRoundResult(null);
     pauseBGM();
   }, []);
 
-  const handleCreateRoom = async (nickname: string) => {
+  /** 소켓 방 이탈 후 방 참가 메뉴로 (닉네임 유지). */
+  const leaveToRoomMenu = useCallback(() => {
+    acceptRoomStateRef.current = false;
+    gameSocket.leaveRoom();
+    gameSocket.leaveMatchQueue();
+    applyRoomMenuOnly();
+    if (import.meta.env.DEV) {
+      const nick = nicknameRef.current?.trim() ?? '';
+      console.log(
+        '[JoopJoop] leaveToRoomMenu → room_selection 예정 · 닉네임(상태 유지):',
+        nick || '(비어 있음 — 홈에서만 입력됨)',
+      );
+    }
+  }, [applyRoomMenuOnly]);
+
+  const handleCreateRoom = async () => {
+    if (!nickname.trim()) return;
     if (!gameSocket.isSocketConnected()) {
       alert('서버에 연결되지 않았습니다. 잠시 후 다시 시도해주세요.');
       return;
     }
     try {
-      const { roomId } = await gameSocket.createRoom(nickname);
+      acceptRoomStateRef.current = true;
+      const { roomId } = await gameSocket.createRoom(nickname.trim());
       setRoomCode(roomId);
+      setJoinSource('private');
+      setQuickMatchPlayerCount(null);
       setCurrentScreen('lobby');
       playBGM();
     } catch {
+      acceptRoomStateRef.current = false;
       alert('방 생성에 실패했습니다.');
     }
   };
 
-  const handleJoinRoom = async (nickname: string, code: string) => {
+  const handleJoinRoom = async (code: string) => {
+    if (!nickname.trim()) return;
     if (!gameSocket.isSocketConnected()) {
       alert('서버에 연결되지 않았습니다. 잠시 후 다시 시도해주세요.');
       return;
     }
     try {
-      await gameSocket.joinRoom(code, nickname);
+      acceptRoomStateRef.current = true;
+      await gameSocket.joinRoom(code, nickname.trim());
       setRoomCode(code);
+      setJoinSource('private');
+      setQuickMatchPlayerCount(null);
       setCurrentScreen('lobby');
       playBGM();
     } catch {
+      acceptRoomStateRef.current = false;
       alert('방 참가에 실패했습니다. 방 코드를 확인해주세요.');
     }
+  };
+
+  const handleStartMatchQueue = async (playerCount: number) => {
+    if (!nickname.trim()) throw new Error('닉네임이 없습니다.');
+    if (!gameSocket.isSocketConnected()) {
+      alert('서버에 연결되지 않았습니다. 잠시 후 다시 시도해주세요.');
+      throw new Error('not connected');
+    }
+    setIsMatchmaking(true);
+    setJoinSource('quick');
+    setQuickMatchPlayerCount(playerCount);
+    try {
+      acceptRoomStateRef.current = true;
+      await gameSocket.joinMatchQueue(playerCount, nickname.trim());
+    } catch (e) {
+      acceptRoomStateRef.current = false;
+      setIsMatchmaking(false);
+      setJoinSource(null);
+      setQuickMatchPlayerCount(null);
+      throw e;
+    }
+  };
+
+  const handleCancelMatchQueue = () => {
+    gameSocket.leaveMatchQueue();
+    setIsMatchmaking(false);
+    acceptRoomStateRef.current = false;
+    setJoinSource(null);
+    setQuickMatchPlayerCount(null);
   };
 
   const handleReady = () => {
@@ -262,10 +295,101 @@ export default function App() {
   };
   const handleUseItemReverse = () => gameSocket.useItemReverse();
 
-  const handleLeaveRoom = () => {
-    gameSocket.leaveRoom();
-    resetToHome();
+  const handleLeaveRoom = leaveToRoomMenu;
+
+  const handleResultContinue = async () => {
+    if (isDevPhase2) {
+      leaveToRoomMenu();
+      return;
+    }
+    const source = joinSource;
+    const count = quickMatchPlayerCount ?? gameState?.players.length ?? 3;
+    if (source === 'private') {
+      try {
+        await gameSocket.returnToLobby();
+      } catch (e) {
+        alert(e instanceof Error ? e.message : String(e));
+      }
+      return;
+    }
+    if (source === 'quick') {
+      leaveToRoomMenu();
+      queueMicrotask(() => {
+        void handleStartMatchQueue(count).catch((e) => {
+          alert(e instanceof Error ? e.message : String(e));
+        });
+      });
+      return;
+    }
+    leaveToRoomMenu();
   };
+
+  useEffect(() => {
+    if (isDevPhase2) return;
+
+    gameSocket.connect();
+
+    const handleRoomState = (state: GameState) => {
+      if (!acceptRoomStateRef.current) {
+        return;
+      }
+
+      setGameState(state);
+
+      const socketId = gameSocket.getSocket()?.id;
+      if (socketId) setCurrentPlayerId(socketId);
+
+      if (state.peekResult) {
+        setActivePeek(state.peekResult);
+        setTimeout(() => setActivePeek(null), 4000);
+      }
+
+      if (state.lastPassEvent) {
+        setActivePassEvent(state.lastPassEvent);
+        setTimeout(() => setActivePassEvent(null), 4000);
+        playPoint();
+      }
+
+      if (state.roundResult) {
+        setActiveRoundResult(state.roundResult);
+        setTimeout(() => setActiveRoundResult(null), 3500);
+        playDingDong();
+      }
+
+      if (state.phase === 'phase2_playing' && state.allPlayersSelected && !prevPhase2AllSelectedRef.current) {
+        playPoint();
+      }
+      prevPhase2AllSelectedRef.current =
+        state.phase === 'phase2_playing' ? state.allPlayersSelected : false;
+
+      if (state.phase === 'game_over') {
+        setCurrentScreen('result');
+      } else if (state.phase === 'item_selection') {
+        setCurrentScreen('item_selection');
+        setIsMatchmaking(false);
+      } else if (state.phase === 'lobby') {
+        setCurrentScreen('lobby');
+        setIsMatchmaking(false);
+      } else if (state.gameState === 'playing') {
+        setCurrentScreen('game');
+        setIsMatchmaking(false);
+      }
+    };
+
+    const handleRoomDestroyed = (data: { message: string }) => {
+      const msg = data.message || '방이 파괴되었습니다.';
+      applyRoomMenuOnly();
+      setRoomDestroyedBanner(msg);
+    };
+
+    gameSocket.onRoomState(handleRoomState);
+    gameSocket.onRoomDestroyed(handleRoomDestroyed);
+
+    return () => {
+      gameSocket.offRoomState(handleRoomState);
+      gameSocket.offRoomDestroyed(handleRoomDestroyed);
+    };
+  }, [leaveToRoomMenu, applyRoomMenuOnly]);
 
   // ── Dev mode handlers ────────────────────────────────────────────────────
 
@@ -325,7 +449,7 @@ export default function App() {
     const next = !bgmMuted;
     setBGMMuted(next);
     setBgmMuted(next);
-    if (!next && (currentScreen === 'lobby' || currentScreen === 'game')) playBGM();
+    if (!next && (currentScreen === 'lobby' || currentScreen === 'game' || currentScreen === 'item_selection')) playBGM();
   };
   const handleToggleSFX = () => {
     const next = !sfxMuted;
@@ -347,6 +471,22 @@ export default function App() {
 
   return (
     <div className="size-full min-h-screen">
+      {roomDestroyedBanner && (
+        <div
+          className="fixed left-1/2 -translate-x-1/2 z-[9999] max-w-[min(100%-1rem,28rem)] px-3 py-2 bg-amber-200 border-2 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-start gap-2 text-sm font-bold text-black"
+          style={{ top: 'max(3.25rem, calc(env(safe-area-inset-top) + 2.75rem))' }}
+          role="status"
+        >
+          <span className="flex-1 min-w-0">{roomDestroyedBanner}</span>
+          <button
+            type="button"
+            className="shrink-0 px-2 py-0.5 bg-white border-2 border-black rounded-lg text-xs font-black hover:bg-slate-50"
+            onClick={() => setRoomDestroyedBanner(null)}
+          >
+            닫기
+          </button>
+        </div>
+      )}
       {/* 사운드 온/오프: 상단 가운데 고정, 작은 버튼 하나만 노출, 탭 시 패널 펼침 */}
       <div ref={soundPanelRef} className="fixed top-2 left-1/2 -translate-x-1/2 z-[9998] flex flex-col items-center gap-1.5" style={{ top: 'max(0.5rem, env(safe-area-inset-top))' }}>
         <button
@@ -448,9 +588,29 @@ export default function App() {
 
       {currentScreen === 'home' && (
         <HomeScreen
-          onCreateRoom={handleCreateRoom}
-          onJoinRoom={handleJoinRoom}
+          onEnterLobby={(nick) => {
+            setNickname(nick);
+            setCurrentScreen('room_selection');
+          }}
         />
+      )}
+
+      {currentScreen === 'room_selection' && (
+        <RoomSelectionScreen
+          nickname={nickname}
+          onCreateRoom={handleCreateRoom}
+          onJoinByCode={handleJoinRoom}
+          onStartMatchQueue={handleStartMatchQueue}
+          onCancelMatchQueue={handleCancelMatchQueue}
+          onShowHelp={() => setCurrentScreen('help')}
+          onBackToHome={resetToHome}
+          isMatchmaking={isMatchmaking}
+          waitingPlayerCount={quickMatchPlayerCount ?? undefined}
+        />
+      )}
+
+      {currentScreen === 'help' && (
+        <HelpScreen onBack={() => setCurrentScreen('room_selection')} />
       )}
 
       {currentScreen === 'lobby' && gameState && (
@@ -493,7 +653,8 @@ export default function App() {
         <ResultScreen
           rankings={gameState.finalRankings}
           currentPlayerId={currentPlayerId}
-          onBackToHome={handleLeaveRoom}
+          continueLabel={joinSource === 'quick' ? '다시 매칭하기' : '계속하기'}
+          onContinue={handleResultContinue}
         />
       )}
     </div>

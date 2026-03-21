@@ -620,7 +620,7 @@ export function Phase1Screen({
           </span>
         </div>
 
-        {/* 전체 플레이어 목록 (나 포함) — 1~3: 1줄, 4: 2×2, 5~6: 3열 */}
+        {/* 전체 플레이어 목록 (나 포함) — iPhone 13 mini 기준 6명도 한 줄로 표시되도록 컴팩트 */}
         {(() => {
           const allPlayers = gameState.players;
           const activePlayers = allPlayers.filter((p) => !p.hasPassed);
@@ -630,18 +630,9 @@ export function Phase1Screen({
             const nextIdx = (currentIdx + gameState.turnDirection + activePlayers.length) % activePlayers.length;
             nextPlayerId = activePlayers[nextIdx].id;
           }
-          const total = allPlayers.length;
 
           return (
-            <div
-              className={`mt-12 gap-2 justify-items-center ${
-                total <= 3
-                  ? 'flex flex-wrap justify-center'
-                  : total === 4
-                  ? 'grid grid-cols-2'
-                  : 'grid grid-cols-3'
-              }`}
-            >
+            <div className="mt-16 sm:mt-20 flex flex-nowrap justify-center items-start gap-1 sm:gap-2 min-w-0">
               {allPlayers.map((player, i) => {
                 const idx = playerIndex(player.id);
                 const isMe = player.id === currentPlayerId;
@@ -650,36 +641,29 @@ export function Phase1Screen({
                 const pi = gameState.playerItems[player.id];
                 const piMeta = pi?.item ? ITEM_META[pi.item] : null;
                 const toast = actionToasts[player.id];
-                // 마지막 줄 홀수 셀 가운데 정렬 (5명→5번째, 7명→7번째 등)
-                const colsPerRow = total <= 3 ? total : total === 4 ? 2 : 3;
-                const lastRowCount = total % colsPerRow;
-                const isLastRowCenter = lastRowCount > 0 && i >= total - lastRowCount && i === total - lastRowCount && lastRowCount < colsPerRow;
-                const colStartClass = isLastRowCenter
-                  ? lastRowCount === 1 ? 'col-start-2' : ''
-                  : '';
                 return (
                   <div
                     key={player.id}
-                    className={`relative flex flex-col items-center p-2 border-2 border-black rounded-lg w-20 ${
-                      player.hasPassed ? 'bg-slate-300 opacity-60' : 'bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
-                    } ${isMe ? 'border-yellow-500 bg-yellow-50' : ''} ${isTheirTurn ? 'ring-2 ring-yellow-400 -translate-y-1' : ''} ${isNext ? 'ring-2 ring-blue-300' : ''} ${colStartClass}`}
+                    className={`relative flex flex-col items-center flex-shrink-0 p-1.5 sm:p-2 border-2 border-black rounded-lg w-[54px] sm:w-20 min-w-[54px] sm:min-w-0 ${
+                      player.hasPassed ? 'bg-slate-300 opacity-60' : 'bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] sm:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+                    } ${isMe ? 'border-yellow-500 bg-yellow-50' : ''} ${isTheirTurn ? 'ring-2 ring-yellow-400 -translate-y-0.5 sm:-translate-y-1' : ''} ${isNext ? 'ring-2 ring-blue-300' : ''}`}
                   >
                     {/* Action toast bubble */}
                     {toast && (
                       <div
                         key={toast.key}
-                        className={`absolute -top-8 left-1/2 -translate-x-1/2 z-30 whitespace-nowrap px-1.5 py-0.5 rounded-lg border-2 border-black font-black text-[10px] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] pointer-events-none ${
+                        className={`absolute -top-6 sm:-top-8 left-1/2 -translate-x-1/2 z-30 whitespace-nowrap px-1.5 sm:px-2 py-0.5 rounded border-2 border-black font-black text-[8px] sm:text-[10px] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] pointer-events-none ${
                           toast.type === 'pass' ? 'bg-red-400 text-white' : 'bg-green-400 text-white'
                         }`}
                         style={{ animation: 'toastPop 0.25s ease-out' }}
                       >
                         {toast.label}
                         <span
-                          className="absolute -bottom-[5px] left-1/2 -translate-x-1/2 w-0 h-0"
+                          className="absolute -bottom-[4px] left-1/2 -translate-x-1/2 w-0 h-0"
                           style={{
-                            borderLeft: '4px solid transparent',
-                            borderRight: '4px solid transparent',
-                            borderTop: `5px solid ${toast.type === 'pass' ? '#f87171' : '#4ade80'}`,
+                            borderLeft: '3px solid transparent',
+                            borderRight: '3px solid transparent',
+                            borderTop: `4px solid ${toast.type === 'pass' ? '#f87171' : '#4ade80'}`,
                           }}
                         />
                       </div>
@@ -687,38 +671,38 @@ export function Phase1Screen({
 
                     {/* 배지: 고민 중 / 다음 차례 / 나 */}
                     {isMe && !isTheirTurn && !toast && (
-                      <span className="absolute -top-3 bg-yellow-500 border-2 border-black rounded-full px-1.5 py-0.5 text-[8px] font-black text-white z-10">
+                      <span className="absolute -top-2.5 sm:-top-3 bg-yellow-500 border border-black rounded-full px-1.5 py-0.5 text-[7px] sm:text-[8px] font-black text-white z-10 leading-none">
                         나
                       </span>
                     )}
                     {isTheirTurn && !toast && (
-                      <span className="absolute -top-3 bg-yellow-400 border-2 border-black rounded-full px-1.5 py-0.5 text-[8px] font-black animate-bounce z-10">
-                        {isMe ? '내 차례!' : '고민 중...'}
+                      <span className="absolute -top-2.5 sm:-top-3 bg-yellow-400 border border-black rounded-full px-1.5 py-0.5 text-[7px] sm:text-[8px] font-black animate-bounce z-10 leading-none max-w-[46px] sm:max-w-none truncate">
+                        {isMe ? '내 차례!' : '고민 중'}
                       </span>
                     )}
                     {isNext && !toast && (
-                      <span className="absolute -top-3 bg-blue-400 border-2 border-black rounded-full px-1.5 py-0.5 text-[8px] font-black z-10 whitespace-nowrap">
-                        다음 차례
+                      <span className="absolute -top-2.5 sm:-top-3 bg-blue-400 border border-black rounded-full px-1.5 py-0.5 text-[7px] sm:text-[8px] font-black z-10 leading-none">
+                        다음
                       </span>
                     )}
 
-                    <div className={`relative w-9 h-9 ${AVATAR_COLORS[idx % AVATAR_COLORS.length]} rounded-full border-2 border-black flex items-center justify-center text-base mb-0.5`}>
+                    <div className={`relative w-7 h-7 sm:w-9 sm:h-9 ${AVATAR_COLORS[idx % AVATAR_COLORS.length]} rounded-full border-2 border-black flex items-center justify-center text-sm sm:text-base mb-0.5 flex-shrink-0`}>
                       {AVATARS[idx % AVATARS.length]}
                       {piMeta && (
-                        <div className={`absolute -bottom-0.5 -left-0.5 w-4 h-4 ${piMeta.color} ${pi?.used ? 'grayscale opacity-70' : ''} rounded-full border border-black flex items-center justify-center`}>
-                          {(() => { const Icon = piMeta.icon; return <Icon className="w-2 h-2 text-white" />; })()}
-                          {pi?.used && <X className="absolute inset-0 m-auto w-2.5 h-2.5 text-red-600" />}
+                        <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 sm:w-4 sm:h-4 ${piMeta.color} ${pi?.used ? 'grayscale opacity-70' : ''} rounded-full border border-black flex items-center justify-center`}>
+                          {(() => { const Icon = piMeta.icon; return <Icon className="w-1.5 h-1.5 sm:w-2 sm:h-2 text-white" />; })()}
+                          {pi?.used && <X className="absolute inset-0 m-auto w-1.5 h-1.5 sm:w-2 sm:h-2 text-red-600" />}
                         </div>
                       )}
                     </div>
-                    <span className="font-bold text-[10px] truncate w-full text-center leading-tight">
-                      {player.nickname}{isMe && <span className="text-yellow-600"> ★</span>}
+                    <span className="font-bold text-[9px] sm:text-[10px] truncate w-full text-center leading-tight">
+                      {player.nickname}{isMe && <span className="text-yellow-600">★</span>}
                     </span>
                     {player.hasPassed ? (
-                      <span className="text-[9px] font-black text-red-600 bg-red-100 px-1 py-0.5 mt-0.5 rounded border border-red-300">포기</span>
+                      <span className="text-[8px] sm:text-[9px] font-black text-red-600 bg-red-100 px-1 py-0.5 mt-0.5 rounded border border-red-300 leading-none">포기</span>
                     ) : (
-                      <span className="text-[9px] font-black text-blue-600 bg-blue-100 px-1 py-0.5 mt-0.5 rounded border border-blue-300">
-                        {player.currentBid > 0 ? `${player.currentBid.toLocaleString()}원` : '대기'}
+                      <span className="text-[8px] sm:text-[9px] font-black text-blue-600 bg-blue-100 px-1 py-0.5 mt-0.5 rounded border border-blue-300 leading-none truncate max-w-full block text-center">
+                        {player.currentBid > 0 ? (player.currentBid >= 1000 ? `${Math.floor(player.currentBid / 1000)}k` : String(player.currentBid)) : '대기'}
                       </span>
                     )}
                   </div>
