@@ -1,39 +1,44 @@
-import { useState } from 'react';
-import {
-  PlusCircle,
-  KeyRound,
-  Zap,
-  BookOpen,
-  ArrowRight,
-  LogOut,
-  RefreshCw,
-  AlertCircle,
-} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { PlusCircle, KeyRound, Zap, BookOpen, ArrowRight, RefreshCw, AlertCircle, User, CheckCircle2 } from 'lucide-react';
 import { playClick } from '../../lib/audio';
+
+type QuickMatchStage = 'idle' | 'searching' | 'found_countdown';
 
 interface RoomSelectionScreenProps {
   nickname: string;
+  isNicknameSaved: boolean;
+  onSaveNickname: (nickname: string) => void;
+  onStartNicknameEdit: () => void;
   onCreateRoom: () => void;
   onJoinByCode: (code: string) => void;
   onStartMatchQueue: (playerCount: number) => Promise<void>;
   onCancelMatchQueue: () => void;
   onShowHelp: () => void;
-  onBackToHome: () => void;
+  onExitRoomMenu: () => void;
   /** True while waiting for match after successful join_match_queue */
   isMatchmaking: boolean;
+  quickMatchStage: QuickMatchStage;
+  quickMatchCountdown: number | null;
+  quickMatchNotice: string | null;
   /** 부모가 설정한 큐 인원(결과 화면에서 재매칭 등) — 대기 문구에 사용 */
   waitingPlayerCount?: number;
 }
 
 export function RoomSelectionScreen({
   nickname,
+  isNicknameSaved,
+  onSaveNickname,
+  onStartNicknameEdit,
   onCreateRoom,
   onJoinByCode,
   onStartMatchQueue,
   onCancelMatchQueue,
   onShowHelp,
-  onBackToHome,
+  onExitRoomMenu,
   isMatchmaking,
+  quickMatchStage,
+  quickMatchCountdown,
+  quickMatchNotice,
   waitingPlayerCount,
 }: RoomSelectionScreenProps) {
   const [showCodePopup, setShowCodePopup] = useState(false);
@@ -41,6 +46,16 @@ export function RoomSelectionScreen({
   const [quickUi, setQuickUi] = useState<'closed' | 'select' | 'waiting'>('closed');
   const [matchTarget, setMatchTarget] = useState(3);
   const [error, setError] = useState('');
+  const [nicknameInput, setNicknameInput] = useState(nickname);
+  const [isEditingNickname, setIsEditingNickname] = useState(!isNicknameSaved);
+
+  useEffect(() => {
+    setNicknameInput(nickname);
+  }, [nickname]);
+
+  useEffect(() => {
+    setIsEditingNickname(!isNicknameSaved);
+  }, [isNicknameSaved]);
 
   const showError = (msg: string) => {
     setError(msg);
@@ -54,6 +69,10 @@ export function RoomSelectionScreen({
   };
 
   const handleConfirmCode = () => {
+    if (!isNicknameSaved) {
+      showError('닉네임 저장 후 참가할 수 있습니다.');
+      return;
+    }
     const c = codeInput.trim().toUpperCase();
     if (c.length < 4) {
       showError('방 코드를 확인해주세요.');
@@ -65,6 +84,10 @@ export function RoomSelectionScreen({
   };
 
   const handleConfirmQuickMatch = async () => {
+    if (!isNicknameSaved) {
+      showError('닉네임 저장 후 빠른 참가를 이용해주세요.');
+      return;
+    }
     playClick();
     setQuickUi('waiting');
     try {
@@ -82,9 +105,32 @@ export function RoomSelectionScreen({
   };
 
   const overlayOpen =
-    showCodePopup || quickUi === 'select' || quickUi === 'waiting' || isMatchmaking;
+    showCodePopup || quickUi === 'select' || quickUi === 'waiting' || isMatchmaking || quickMatchStage !== 'idle';
 
   const displayMatchCount = waitingPlayerCount ?? matchTarget;
+  const canJoin = isNicknameSaved && nickname.trim().length > 0;
+
+  const handleSaveNickname = () => {
+    const trimmed = nicknameInput.trim();
+    if (!trimmed) {
+      showError('닉네임을 입력해주세요.');
+      return;
+    }
+    if (trimmed.length > 8) {
+      showError('닉네임은 최대 8자입니다.');
+      return;
+    }
+    playClick();
+    onSaveNickname(trimmed);
+    setIsEditingNickname(false);
+  };
+
+  const handleStartEditNickname = () => {
+    playClick();
+    onStartNicknameEdit();
+    setNicknameInput(nickname);
+    setIsEditingNickname(true);
+  };
 
   return (
     <div
@@ -192,10 +238,10 @@ export function RoomSelectionScreen({
                 </div>
               )}
 
-              {(quickUi === 'waiting' || isMatchmaking) && !showCodePopup && quickUi !== 'select' && (
+              {(quickUi === 'waiting' || isMatchmaking || quickMatchStage === 'searching') && !showCodePopup && quickUi !== 'select' && quickMatchStage !== 'found_countdown' && (
                 <div className="w-full max-w-sm flex flex-col items-center text-center">
                   <RefreshCw className="w-12 h-12 sm:w-16 sm:h-16 text-blue-500 mb-3 sm:mb-4 animate-spin" />
-                  <h3 className="text-xl sm:text-2xl font-black mb-2">대기 중</h3>
+                  <h3 className="text-xl sm:text-2xl font-black mb-2">게임 찾는 중</h3>
                   <p className="text-slate-600 font-bold text-sm sm:text-base mb-2">
                     같은 인원({displayMatchCount}명)을 선택한 플레이어를 찾는 중이에요.
                   </p>
@@ -209,40 +255,102 @@ export function RoomSelectionScreen({
                   </button>
                 </div>
               )}
+
+              {quickMatchStage === 'found_countdown' && !showCodePopup && (
+                <div className="w-full max-w-sm flex flex-col items-center text-center">
+                  <CheckCircle2 className="w-12 h-12 sm:w-16 sm:h-16 text-green-500 mb-3 sm:mb-4" />
+                  <h3 className="text-2xl sm:text-3xl font-black mb-2 text-green-700">게임 발견!</h3>
+                  <p className="text-slate-700 font-black text-sm sm:text-base mb-1">
+                    {quickMatchNotice ?? '빠른 매칭이 성사되었습니다.'}
+                  </p>
+                  <p className="text-xs sm:text-sm text-slate-500 mb-5">서버에 연결 중... 잠시 후 게임이 시작됩니다.</p>
+                  <div className="w-20 h-20 rounded-full bg-green-100 border-4 border-black flex items-center justify-center text-3xl font-black text-green-700 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                    {quickMatchCountdown ?? 3}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           <div className="flex justify-between items-start gap-2 mb-4 sm:mb-6 border-b-2 sm:border-b-4 border-black pb-3 sm:pb-4">
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-[11px] sm:text-xs font-black uppercase tracking-wide text-slate-500 mb-0.5">방 참가 메뉴</p>
               <h2 className="text-xl sm:text-2xl font-black leading-tight">환영합니다!</h2>
-              <p className="text-blue-600 font-bold text-base sm:text-lg truncate">
-                {nickname} <span className="text-sm text-slate-500 font-bold">입주자님</span>
-              </p>
+              {isEditingNickname ? (
+                <div className="mt-2 flex flex-col sm:flex-row gap-2">
+                  <label className="sr-only" htmlFor="nickname-input">닉네임</label>
+                  <div className="flex-1 flex items-center gap-2 rounded-xl border-2 border-black bg-slate-50 px-2.5">
+                    <User className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                    <input
+                      id="nickname-input"
+                      type="text"
+                      value={nicknameInput}
+                      onChange={(e) => setNicknameInput(e.target.value)}
+                      maxLength={8}
+                      placeholder="닉네임 입력"
+                      className="w-full bg-transparent py-2 text-base font-bold outline-none"
+                      onKeyDown={(e) => {
+                        if (e.nativeEvent.isComposing) return;
+                        if (e.key === 'Enter') handleSaveNickname();
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSaveNickname}
+                    className="min-h-[42px] px-4 py-2 bg-blue-500 text-white border-2 border-black rounded-xl font-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none"
+                  >
+                    저장
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-2 flex flex-col sm:flex-row gap-2 sm:items-center">
+                  <p className="text-blue-600 font-bold text-base sm:text-lg truncate">
+                    {nickname} <span className="text-sm text-slate-500 font-bold">입주자님</span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleStartEditNickname}
+                    className="w-fit min-h-[38px] px-3 py-1.5 bg-slate-100 border-2 border-black rounded-xl text-xs sm:text-sm font-black hover:bg-slate-200"
+                  >
+                    변경
+                  </button>
+                </div>
+              )}
             </div>
             <button
               type="button"
               onClick={() => {
                 playClick();
-                onBackToHome();
+                onExitRoomMenu();
               }}
               className="flex flex-col items-center gap-0.5 p-1.5 sm:p-2 border-2 border-slate-300 rounded-xl hover:bg-slate-100 text-slate-600 touch-manipulation flex-shrink-0 max-w-[5.5rem]"
-              title="닉네임을 바꾸려면 (처음 화면)"
-              aria-label="닉네임 다시 입력 — 처음 화면으로"
+              title="화면 초기화"
+              aria-label="방 참가 화면 초기화"
             >
-              <LogOut className="w-5 h-5" />
-              <span className="text-[10px] sm:text-[11px] font-black leading-tight text-center">닉네임 변경</span>
+              <RefreshCw className="w-5 h-5" />
+              <span className="text-[10px] sm:text-[11px] font-black leading-tight text-center">초기화</span>
             </button>
           </div>
+          {!canJoin && (
+            <p className="mb-3 text-sm font-bold text-amber-700 bg-amber-100 border-2 border-black rounded-lg px-3 py-2">
+              방 만들기, 코드 참가, 빠른 참가는 닉네임 저장 후 이용할 수 있습니다.
+            </p>
+          )}
 
           <div className="flex flex-col gap-3 sm:gap-4">
             <button
               type="button"
               onClick={() => {
+                if (!canJoin) {
+                  showError('닉네임 저장 후 방을 만들 수 있습니다.');
+                  return;
+                }
                 playClick();
                 onCreateRoom();
               }}
-              className="w-full min-h-[52px] sm:min-h-[56px] p-4 sm:p-5 bg-green-400 hover:bg-green-300 text-black border-2 sm:border-4 border-black rounded-2xl font-black text-lg sm:text-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all flex items-center justify-between group touch-manipulation"
+              disabled={!canJoin}
+              className={`w-full min-h-[52px] sm:min-h-[56px] p-4 sm:p-5 text-black border-2 sm:border-4 border-black rounded-2xl font-black text-lg sm:text-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all flex items-center justify-between group touch-manipulation ${canJoin ? 'bg-green-400 hover:bg-green-300' : 'bg-slate-300 text-slate-600 cursor-not-allowed opacity-80'}`}
             >
               <span className="flex items-center gap-3 min-w-0">
                 <PlusCircle className="w-6 h-6 sm:w-7 sm:h-7 flex-shrink-0 group-hover:rotate-90 transition-transform" />
@@ -254,11 +362,16 @@ export function RoomSelectionScreen({
             <button
               type="button"
               onClick={() => {
+                if (!canJoin) {
+                  showError('닉네임 저장 후 코드 참가가 가능합니다.');
+                  return;
+                }
                 playClick();
                 setShowCodePopup(true);
                 setCodeInput('');
               }}
-              className="w-full min-h-[52px] sm:min-h-[56px] p-4 sm:p-5 bg-blue-400 hover:bg-blue-300 text-white border-2 sm:border-4 border-black rounded-2xl font-black text-lg sm:text-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all flex items-center justify-between group touch-manipulation"
+              disabled={!canJoin}
+              className={`w-full min-h-[52px] sm:min-h-[56px] p-4 sm:p-5 border-2 sm:border-4 border-black rounded-2xl font-black text-lg sm:text-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all flex items-center justify-between group touch-manipulation ${canJoin ? 'bg-blue-400 hover:bg-blue-300 text-white' : 'bg-slate-300 text-slate-600 cursor-not-allowed opacity-80'}`}
             >
               <span className="flex items-center gap-3 min-w-0">
                 <KeyRound className="w-6 h-6 sm:w-7 sm:h-7 flex-shrink-0" />
@@ -270,11 +383,16 @@ export function RoomSelectionScreen({
             <button
               type="button"
               onClick={() => {
+                if (!canJoin) {
+                  showError('닉네임 저장 후 빠른 참가가 가능합니다.');
+                  return;
+                }
                 playClick();
                 setQuickUi('select');
                 setMatchTarget(3);
               }}
-              className="w-full min-h-[52px] sm:min-h-[56px] p-4 sm:p-5 bg-yellow-400 hover:bg-yellow-300 text-black border-2 sm:border-4 border-black rounded-2xl font-black text-lg sm:text-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all flex items-center justify-between group touch-manipulation"
+              disabled={!canJoin}
+              className={`w-full min-h-[52px] sm:min-h-[56px] p-4 sm:p-5 text-black border-2 sm:border-4 border-black rounded-2xl font-black text-lg sm:text-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all flex items-center justify-between group touch-manipulation ${canJoin ? 'bg-yellow-400 hover:bg-yellow-300' : 'bg-slate-300 text-slate-600 cursor-not-allowed opacity-80'}`}
             >
               <span className="flex items-center gap-3 min-w-0">
                 <Zap className="w-6 h-6 sm:w-7 sm:h-7 flex-shrink-0 text-red-500" />

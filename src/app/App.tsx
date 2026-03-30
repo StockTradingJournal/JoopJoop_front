@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Music2, Volume2, VolumeX, SlidersHorizontal } from 'lucide-react';
 import { gameSocket } from '../lib/gameSocket';
 import { GameState, ItemType, PeekResult, LastPassEvent, RoundResult } from '../lib/socket-types';
-import { playBGM, pauseBGM, playPoint, playDingDong, isBGMMuted, isSFXMuted, setBGMMuted, setSFXMuted } from '../lib/audio';
-import { HomeScreen } from './components/HomeScreen';
+import { playBGM, pauseBGM, playPoint, playDingDong, playMatchFound, isBGMMuted, isSFXMuted, setBGMMuted, setSFXMuted } from '../lib/audio';
 import { RoomSelectionScreen } from './components/RoomSelectionScreen';
 import { HelpScreen } from './components/HelpScreen';
 import { LobbyScreen } from './components/LobbyScreen';
@@ -11,9 +10,10 @@ import { ItemSelectionScreen } from './components/ItemSelectionScreen';
 import { GameContainer } from './components/GameContainer';
 import { ResultScreen } from './components/ResultScreen';
 
-type Screen = 'home' | 'room_selection' | 'help' | 'lobby' | 'item_selection' | 'game' | 'result';
+type Screen = 'room_selection' | 'help' | 'lobby' | 'item_selection' | 'game' | 'result';
 
 type JoinSource = 'private' | 'quick';
+type QuickMatchStage = 'idle' | 'searching' | 'found_countdown';
 
 // ── Dev mode: ?devPhase=2 로 Phase2 화면 바로 테스트 ──────────────────────────
 const DEV_PHASE2_MOCK_ID = 'dev-player-1';
@@ -84,9 +84,19 @@ function buildDevState(playerCount: number, phase2Round = 1): GameState {
 }
 
 const isDevPhase2 = new URLSearchParams(window.location.search).get('devPhase') === '2';
+const NICKNAME_STORAGE_KEY = 'joop_nickname';
+
+function getStoredNickname(): string {
+  try {
+    return localStorage.getItem(NICKNAME_STORAGE_KEY)?.trim() ?? '';
+  } catch {
+    return '';
+  }
+}
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState<Screen>(isDevPhase2 ? 'game' : 'home');
+  const QUICK_MATCH_TRANSITION_DELAY_MS = 3000;
+  const [currentScreen, setCurrentScreen] = useState<Screen>(isDevPhase2 ? 'game' : 'room_selection');
   const [roomCode, setRoomCode] = useState('');
   const [currentPlayerId, setCurrentPlayerId] = useState(isDevPhase2 ? DEV_PHASE2_MOCK_ID : '');
   const [gameState, setGameState] = useState<GameState | null>(isDevPhase2 ? buildDevState(3) : null);
@@ -103,11 +113,8 @@ export default function App() {
   const [sfxMuted, setSfxMuted] = useState(() => isSFXMuted());
   const [soundPanelOpen, setSoundPanelOpen] = useState(false);
   const soundPanelRef = useRef<HTMLDivElement>(null);
-  const [nickname, setNickname] = useState('');
-  const nicknameRef = useRef(nickname);
-  useEffect(() => {
-    nicknameRef.current = nickname;
-  }, [nickname]);
+  const [nickname, setNickname] = useState(() => getStoredNickname());
+  const [isNicknameSaved, setIsNicknameSaved] = useState(() => getStoredNickname().length > 0);
   const [isMatchmaking, setIsMatchmaking] = useState(false);
   /** 방 만들기/코드 입장 vs 빠른 참가 — 결과 화면「계속하기」분기 */
   const [joinSource, setJoinSource] = useState<JoinSource | null>(null);
@@ -115,25 +122,43 @@ export default function App() {
   const [quickMatchPlayerCount, setQuickMatchPlayerCount] = useState<number | null>(null);
   /** 방 파괴 알림 — `window.alert` 대비(닫기 클릭이 뒤 버튼으로 전파되어 홈으로 가는 이슈 방지) */
   const [roomDestroyedBanner, setRoomDestroyedBanner] = useState<string | null>(null);
+  const [matchFoundNotice, setMatchFoundNotice] = useState<string | null>(null);
+  const [quickMatchStage, setQuickMatchStage] = useState<QuickMatchStage>('idle');
+  const [quickMatchCountdown, setQuickMatchCountdown] = useState<number | null>(null);
+  const matchFoundTimeoutRef = useRef<number | null>(null);
+  const matchFoundIntervalRef = useRef<number | null>(null);
   /** false면 `room:state` 무시 — 나가기 직후 지연 패킷이 로비로 되돌리는 것 방지 */
   const acceptRoomStateRef = useRef(false);
 
-  const resetToHome = useCallback(() => {
+  const clearMatchFoundNotice = useCallback(() => {
+    if (matchFoundTimeoutRef.current) {
+      window.clearTimeout(matchFoundTimeoutRef.current);
+      matchFoundTimeoutRef.current = null;
+    }
+    if (matchFoundIntervalRef.current) {
+      window.clearInterval(matchFoundIntervalRef.current);
+      matchFoundIntervalRef.current = null;
+    }
+    setQuickMatchStage('idle');
+    setQuickMatchCountdown(null);
+    setMatchFoundNotice(null);
+  }, []);
+
+  const resetToRoomSelection = useCallback(() => {
     gameSocket.leaveMatchQueue();
-    setCurrentScreen('home');
+    setCurrentScreen('room_selection');
     setRoomCode('');
     setCurrentPlayerId('');
     setGameState(null);
-    setNickname('');
     setIsMatchmaking(false);
     setJoinSource(null);
     setQuickMatchPlayerCount(null);
     setActivePeek(null);
     setActivePassEvent(null);
     setActiveRoundResult(null);
-    pauseBGM();
     acceptRoomStateRef.current = false;
     setRoomDestroyedBanner(null);
+    clearMatchFoundNotice();
   }, []);
 
   /** 방 참가 메뉴 UI로만 복귀 (소켓 leave 없음 — 방 파괴 알림 등) */
@@ -149,26 +174,19 @@ export default function App() {
     setActivePeek(null);
     setActivePassEvent(null);
     setActiveRoundResult(null);
-    pauseBGM();
+    clearMatchFoundNotice();
   }, []);
 
   /** 소켓 방 이탈 후 방 참가 메뉴로 (닉네임 유지). */
-  const leaveToRoomMenu = useCallback(() => {
+  const leaveToRoomMenu = useCallback(async () => {
     acceptRoomStateRef.current = false;
-    gameSocket.leaveRoom();
+    await gameSocket.leaveRoom();
     gameSocket.leaveMatchQueue();
     applyRoomMenuOnly();
-    if (import.meta.env.DEV) {
-      const nick = nicknameRef.current?.trim() ?? '';
-      console.log(
-        '[JoopJoop] leaveToRoomMenu → room_selection 예정 · 닉네임(상태 유지):',
-        nick || '(비어 있음 — 홈에서만 입력됨)',
-      );
-    }
   }, [applyRoomMenuOnly]);
 
   const handleCreateRoom = async () => {
-    if (!nickname.trim()) return;
+    if (!isNicknameSaved || !nickname.trim()) return;
     if (!gameSocket.isSocketConnected()) {
       alert('서버에 연결되지 않았습니다. 잠시 후 다시 시도해주세요.');
       return;
@@ -180,7 +198,6 @@ export default function App() {
       setJoinSource('private');
       setQuickMatchPlayerCount(null);
       setCurrentScreen('lobby');
-      playBGM();
     } catch {
       acceptRoomStateRef.current = false;
       alert('방 생성에 실패했습니다.');
@@ -188,7 +205,7 @@ export default function App() {
   };
 
   const handleJoinRoom = async (code: string) => {
-    if (!nickname.trim()) return;
+    if (!isNicknameSaved || !nickname.trim()) return;
     if (!gameSocket.isSocketConnected()) {
       alert('서버에 연결되지 않았습니다. 잠시 후 다시 시도해주세요.');
       return;
@@ -200,7 +217,6 @@ export default function App() {
       setJoinSource('private');
       setQuickMatchPlayerCount(null);
       setCurrentScreen('lobby');
-      playBGM();
     } catch {
       acceptRoomStateRef.current = false;
       alert('방 참가에 실패했습니다. 방 코드를 확인해주세요.');
@@ -208,7 +224,7 @@ export default function App() {
   };
 
   const handleStartMatchQueue = async (playerCount: number) => {
-    if (!nickname.trim()) throw new Error('닉네임이 없습니다.');
+    if (!isNicknameSaved || !nickname.trim()) throw new Error('닉네임을 저장한 뒤 빠른 참가를 이용해주세요.');
     if (!gameSocket.isSocketConnected()) {
       alert('서버에 연결되지 않았습니다. 잠시 후 다시 시도해주세요.');
       throw new Error('not connected');
@@ -216,6 +232,8 @@ export default function App() {
     setIsMatchmaking(true);
     setJoinSource('quick');
     setQuickMatchPlayerCount(playerCount);
+    setQuickMatchStage('searching');
+    setQuickMatchCountdown(null);
     try {
       acceptRoomStateRef.current = true;
       await gameSocket.joinMatchQueue(playerCount, nickname.trim());
@@ -224,6 +242,7 @@ export default function App() {
       setIsMatchmaking(false);
       setJoinSource(null);
       setQuickMatchPlayerCount(null);
+      clearMatchFoundNotice();
       throw e;
     }
   };
@@ -234,6 +253,7 @@ export default function App() {
     acceptRoomStateRef.current = false;
     setJoinSource(null);
     setQuickMatchPlayerCount(null);
+    clearMatchFoundNotice();
   };
 
   const handleReady = () => {
@@ -295,11 +315,13 @@ export default function App() {
   };
   const handleUseItemReverse = () => gameSocket.useItemReverse();
 
-  const handleLeaveRoom = leaveToRoomMenu;
+  const handleLeaveRoom = () => {
+    void leaveToRoomMenu();
+  };
 
   const handleResultContinue = async () => {
     if (isDevPhase2) {
-      leaveToRoomMenu();
+      await leaveToRoomMenu();
       return;
     }
     const source = joinSource;
@@ -313,15 +335,15 @@ export default function App() {
       return;
     }
     if (source === 'quick') {
-      leaveToRoomMenu();
-      queueMicrotask(() => {
-        void handleStartMatchQueue(count).catch((e) => {
-          alert(e instanceof Error ? e.message : String(e));
-        });
-      });
+      try {
+        await leaveToRoomMenu();
+        await handleStartMatchQueue(count);
+      } catch (e) {
+        alert(e instanceof Error ? e.message : String(e));
+      }
       return;
     }
-    leaveToRoomMenu();
+    await leaveToRoomMenu();
   };
 
   useEffect(() => {
@@ -365,6 +387,38 @@ export default function App() {
       if (state.phase === 'game_over') {
         setCurrentScreen('result');
       } else if (state.phase === 'item_selection') {
+        if (joinSource === 'quick') {
+          if (quickMatchStage === 'found_countdown') return;
+          const playerCount = state.players.length;
+          setMatchFoundNotice(`${playerCount}명 매칭 완료`);
+          setQuickMatchStage('found_countdown');
+          setQuickMatchCountdown(3);
+          playMatchFound();
+          if (matchFoundIntervalRef.current) {
+            window.clearInterval(matchFoundIntervalRef.current);
+          }
+          if (matchFoundTimeoutRef.current) {
+            window.clearTimeout(matchFoundTimeoutRef.current);
+          }
+          matchFoundIntervalRef.current = window.setInterval(() => {
+            setQuickMatchCountdown((prev) => {
+              if (prev == null || prev <= 1) {
+                if (matchFoundIntervalRef.current) {
+                  window.clearInterval(matchFoundIntervalRef.current);
+                  matchFoundIntervalRef.current = null;
+                }
+                return 1;
+              }
+              return prev - 1;
+            });
+          }, 1000);
+          matchFoundTimeoutRef.current = window.setTimeout(() => {
+            setCurrentScreen('item_selection');
+            clearMatchFoundNotice();
+          }, QUICK_MATCH_TRANSITION_DELAY_MS);
+          setIsMatchmaking(false);
+          return;
+        }
         setCurrentScreen('item_selection');
         setIsMatchmaking(false);
       } else if (state.phase === 'lobby') {
@@ -389,7 +443,24 @@ export default function App() {
       gameSocket.offRoomState(handleRoomState);
       gameSocket.offRoomDestroyed(handleRoomDestroyed);
     };
-  }, [leaveToRoomMenu, applyRoomMenuOnly]);
+  }, [leaveToRoomMenu, applyRoomMenuOnly, joinSource, quickMatchStage, clearMatchFoundNotice]);
+
+  useEffect(() => {
+    if (isDevPhase2) return;
+    const startBGM = () => playBGM();
+    window.addEventListener('pointerdown', startBGM, { once: true });
+    window.addEventListener('keydown', startBGM, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', startBGM);
+      window.removeEventListener('keydown', startBGM);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearMatchFoundNotice();
+    };
+  }, [clearMatchFoundNotice]);
 
   // ── Dev mode handlers ────────────────────────────────────────────────────
 
@@ -449,7 +520,7 @@ export default function App() {
     const next = !bgmMuted;
     setBGMMuted(next);
     setBgmMuted(next);
-    if (!next && (currentScreen === 'lobby' || currentScreen === 'game' || currentScreen === 'item_selection')) playBGM();
+    if (!next) playBGM();
   };
   const handleToggleSFX = () => {
     const next = !sfxMuted;
@@ -487,6 +558,15 @@ export default function App() {
           </button>
         </div>
       )}
+      {matchFoundNotice && (
+        <div
+          className="fixed left-1/2 -translate-x-1/2 z-[9999] max-w-[min(100%-1rem,28rem)] px-3 py-2 bg-green-200 border-2 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-sm font-bold text-black"
+          style={{ top: 'max(5.75rem, calc(env(safe-area-inset-top) + 5.25rem))' }}
+          role="status"
+        >
+          {matchFoundNotice}
+        </div>
+      )}
       {/* 사운드 온/오프: 상단 가운데 고정, 작은 버튼 하나만 노출, 탭 시 패널 펼침 */}
       <div ref={soundPanelRef} className="fixed top-2 left-1/2 -translate-x-1/2 z-[9998] flex flex-col items-center gap-1.5" style={{ top: 'max(0.5rem, env(safe-area-inset-top))' }}>
         <button
@@ -498,25 +578,27 @@ export default function App() {
           <SlidersHorizontal className="w-4 h-4 text-slate-700" />
         </button>
         {soundPanelOpen && (
-          <div className="bg-white/98 border-2 border-black rounded-xl px-3 py-2.5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-2 min-w-[130px]">
+          <div className="w-44 bg-white/98 border-2 border-black rounded-xl px-3 py-2.5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-2">
             <div className="text-[10px] font-black text-slate-500 uppercase tracking-wide">소리</div>
             <button
               type="button"
               onClick={handleToggleBGM}
               className={`flex items-center gap-2 w-full rounded-lg border-2 border-black px-2.5 py-1.5 text-left text-sm font-bold transition-colors touch-manipulation ${bgmMuted ? 'bg-slate-200 text-slate-500' : 'bg-amber-100 text-amber-800'}`}
             >
-              <Music2 className="w-4 h-4 flex-shrink-0" />
+              <span className="w-4 h-4 flex items-center justify-center flex-shrink-0"><Music2 className="w-4 h-4" /></span>
               <span>BGM</span>
-              <span className="ml-auto text-xs">{bgmMuted ? '끔' : '켜짐'}</span>
+              <span className="ml-auto w-9 text-center text-xs">{bgmMuted ? '끔' : '켜짐'}</span>
             </button>
             <button
               type="button"
               onClick={handleToggleSFX}
               className={`flex items-center gap-2 w-full rounded-lg border-2 border-black px-2.5 py-1.5 text-left text-sm font-bold transition-colors touch-manipulation ${sfxMuted ? 'bg-slate-200 text-slate-500' : 'bg-blue-100 text-blue-800'}`}
             >
-              {sfxMuted ? <VolumeX className="w-4 h-4 flex-shrink-0" /> : <Volume2 className="w-4 h-4 flex-shrink-0" />}
+              <span className="w-4 h-4 flex items-center justify-center flex-shrink-0">
+                {sfxMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              </span>
               <span>효과음</span>
-              <span className="ml-auto text-xs">{sfxMuted ? '끔' : '켜짐'}</span>
+              <span className="ml-auto w-9 text-center text-xs">{sfxMuted ? '끔' : '켜짐'}</span>
             </button>
           </div>
         )}
@@ -586,25 +668,31 @@ export default function App() {
         </div>
       )}
 
-      {currentScreen === 'home' && (
-        <HomeScreen
-          onEnterLobby={(nick) => {
-            setNickname(nick);
-            setCurrentScreen('room_selection');
-          }}
-        />
-      )}
-
       {currentScreen === 'room_selection' && (
         <RoomSelectionScreen
           nickname={nickname}
+          isNicknameSaved={isNicknameSaved}
+          onSaveNickname={(nextNickname) => {
+            const trimmed = nextNickname.trim();
+            setNickname(trimmed);
+            setIsNicknameSaved(true);
+            try {
+              localStorage.setItem(NICKNAME_STORAGE_KEY, trimmed);
+            } catch {
+              // ignore storage errors
+            }
+          }}
+          onStartNicknameEdit={() => setIsNicknameSaved(false)}
           onCreateRoom={handleCreateRoom}
           onJoinByCode={handleJoinRoom}
           onStartMatchQueue={handleStartMatchQueue}
           onCancelMatchQueue={handleCancelMatchQueue}
           onShowHelp={() => setCurrentScreen('help')}
-          onBackToHome={resetToHome}
+          onExitRoomMenu={resetToRoomSelection}
           isMatchmaking={isMatchmaking}
+          quickMatchStage={quickMatchStage}
+          quickMatchCountdown={quickMatchCountdown}
+          quickMatchNotice={matchFoundNotice}
           waitingPlayerCount={quickMatchPlayerCount ?? undefined}
         />
       )}
