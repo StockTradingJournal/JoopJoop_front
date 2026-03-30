@@ -56,6 +56,7 @@ interface ItemSelectionScreenProps {
   currentPlayerId: string;
   playerItems: Record<string, PlayerItem>;
   onSelectItem: (item: ItemType) => void;
+  matchFoundNotice?: string | null;
 }
 
 function getRandomItem(): ItemType {
@@ -68,6 +69,7 @@ export function ItemSelectionScreen({
   currentPlayerId,
   playerItems,
   onSelectItem,
+  matchFoundNotice,
 }: ItemSelectionScreenProps) {
   const [selected, setSelected] = useState<ItemType | null>(null);
   const [timeLeft, setTimeLeft] = useState(ITEM_SELECTION_TIME_LIMIT);
@@ -141,6 +143,11 @@ export function ItemSelectionScreen({
           <p className="text-xs sm:text-base font-bold text-slate-600 leading-tight">
             딱 <span className="text-red-500 font-black">1번</span> 쓸 수 있는 아이템 1개 고르세요.
           </p>
+          {matchFoundNotice && (
+            <div className="mt-2 inline-flex items-center rounded-full border-2 border-black bg-green-200 px-3 py-1 text-[11px] sm:text-sm font-black text-green-900">
+              {matchFoundNotice}
+            </div>
+          )}
         </div>
 
         {allSelected ? (

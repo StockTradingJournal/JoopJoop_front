@@ -67,6 +67,12 @@ let bgmNextStartTime = 0;
 let bgmScheduled = false;
 let bgmAudio: HTMLAudioElement | null = null; // 파일 BGM 재생 중일 때
 
+function logAudioDebug(...args: unknown[]): void {
+  if (import.meta.env.DEV) {
+    console.debug('[audio]', ...args);
+  }
+}
+
 function scheduleBassLoop(): void {
   const ctx = getAudioContext();
   if (!ctx || !bgmGain) return;
@@ -104,24 +110,10 @@ export function playBGM(): void {
     if (bgmMuted) return;
     resumeContext();
     if (bgmAudio || bgmGain) return; // 이미 재생 중
-
-    // 1) 파일 BGM 시도: bgm.mp3 → bgm.wav (없으면 오실레이터)
-    const tryFile = (filename: string, next: () => void) => {
-      const audio = new Audio(AUDIO(filename));
-      audio.volume = BGM_GAIN;
-      audio.loop = true;
-      audio.addEventListener('canplaythrough', () => {
-        if (bgmAudio || bgmGain) return;
-        audio.play().then(() => { bgmAudio = audio; }).catch(next);
-      }, { once: true });
-      audio.addEventListener('error', next, { once: true });
-      audio.load();
-    };
-
-    tryFile('bgm.mp3', () => {
-      tryFile('bgm.wav', () => playBGMFromOscillator());
-    });
-  } catch {
+    // 네트워크/파일 미존재 에러를 피하기 위해 기본 BGM은 오실레이터로 재생.
+    playBGMFromOscillator();
+  } catch (err) {
+    logAudioDebug('BGM fallback due to exception', err);
     playBGMFromOscillator();
   }
 }
@@ -332,15 +324,41 @@ export function playFanfare(): void {
   });
 }
 
+// ── 빠른 매칭 발견 알림음 (상승 3음) ───────────────────────────────────────────
+export function playMatchFound(): void {
+  if (sfxMuted) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  resumeContext();
+  const t = ctx.currentTime;
+  const notes = [659.25, 783.99, 987.77]; // E5 -> G5 -> B5
+  notes.forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const start = t + i * 0.11;
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.linearRampToValueAtTime(0.22, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.16);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + 0.18);
+  });
+}
+
 // ── 기존 MP3 기반 (클릭/포인트) ─────────────────────────────────────────────
 
 function playOneShot(filename: string, volume = 0.7): void {
   try {
     const a = new Audio(AUDIO(filename));
     a.volume = volume;
-    a.play().catch(() => {});
-  } catch {
-    // ignore
+    a.play().catch((err) => {
+      logAudioDebug(`one-shot failed: ${filename}`, err);
+    });
+  } catch (err) {
+    logAudioDebug(`one-shot exception: ${filename}`, err);
   }
 }
 

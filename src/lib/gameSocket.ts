@@ -79,8 +79,29 @@ class GameSocket {
     this.socket?.emit('add_bot', {});
   }
 
-  leaveRoom() {
-    this.socket?.emit('leave_room', {});
+  leaveRoom(timeoutMs = 1500): Promise<void> {
+    return new Promise((resolve) => {
+      if (!this.socket) {
+        resolve();
+        return;
+      }
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      const timer = window.setTimeout(finish, timeoutMs);
+      try {
+        this.socket.emit('leave_room', {}, () => {
+          window.clearTimeout(timer);
+          finish();
+        });
+      } catch {
+        window.clearTimeout(timer);
+        finish();
+      }
+    });
   }
 
   /** Reset room from game over to lobby (same players). Fails if not in game over. */

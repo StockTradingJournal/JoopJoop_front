@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>60BPM 베이스 루프 테스트</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 360px;
+      margin: 2rem auto;
+      padding: 1rem;
+      text-align: center;
+    }
+    h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+    p { color: #666; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    button {
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
+      border-radius: 8px;
+      border: 2px solid #333;
+      cursor: pointer;
+      margin: 0 0.25rem;
+    }
+    .play { background: #22c55e; color: #fff; }
+    .stop { background: #ef4444; color: #fff; }
+    .play:hover, .stop:hover { opacity: 0.9; }
+    .status { margin-top: 1rem; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>60BPM 베이스 루프 테스트</h1>
+  <p>E1(41.2Hz) 사인파, 1초마다 한 번 재생. 자산가의 여유로움.</p>
+  <button id="play" class="play">재생</button>
+  <button id="stop" class="stop">정지</button>
+  <p id="status" class="status">대기 중 (재생 버튼 클릭)</p>
+
+  <script>
+    class WealthySoundManager {
+      constructor() {
+        this.audioCtx = null;
+        this.isPlaying = false;
+        this.intervalId = null;
+      }
+
+      init() {
+        if (!this.audioCtx) {
+          this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+      }
+
+      playBassLoop() {
+        if (this.isPlaying) return;
+        this.init();
+        this.isPlaying = true;
+
+        const playBeat = () => {
+          const osc = this.audioCtx.createOscillator();
+          const gain = this.audioCtx.createGain();
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(41.2, this.audioCtx.currentTime);
+
+          gain.gain.setValueAtTime(0, this.audioCtx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.3, this.audioCtx.currentTime + 0.1);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + 0.8);
+
+          osc.connect(gain);
+          gain.connect(this.audioCtx.destination);
+
+          osc.start();
+          osc.stop(this.audioCtx.currentTime + 0.9);
+        };
+
+        playBeat();
+        this.intervalId = setInterval(playBeat, 1000);
+      }
+
+      stop() {
+        if (this.intervalId) {
+          clearInterval(this.intervalId);
+          this.intervalId = null;
+        }
+        this.isPlaying = false;
+      }
+    }
+
+    const soundManager = new WealthySoundManager();
+    const playBtn = document.getElementById('play');
+    const stopBtn = document.getElementById('stop');
+    const statusEl = document.getElementById('status');
+
+    playBtn.addEventListener('click', () => {
+      soundManager.playBassLoop();
+      statusEl.textContent = '재생 중 (60BPM E1 베이스)';
+    });
+
+    stopBtn.addEventListener('click', () => {
+      soundManager.stop();
+      statusEl.textContent = '정지됨';
+    });
+  </script>
+</body>
+</html>
