@@ -1,8 +1,8 @@
 import { io, Socket } from 'socket.io-client';
 import { GameState, ItemType } from './socket-types';
 
-const BACKEND_URL = 'https://joopjoop-backend.onrender.com/';
-// const BACKEND_URL = 'http://localhost:8000/';
+// const BACKEND_URL = 'https://joopjoop-backend.onrender.com/';
+const BACKEND_URL = 'http://localhost:8000/';
 
 class GameSocket {
   private socket: Socket | null = null;
@@ -108,18 +108,22 @@ class GameSocket {
   returnToLobby(): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.socket) return reject(new Error('Not connected'));
-      const onOk = () => {
+      const cleanup = () => {
+        this.socket?.off('room:state', onOk);
         this.socket?.off('room:error', onErr);
+      };
+      const onOk = () => {
+        cleanup();
         resolve();
       };
       const onErr = (err: { code?: string; message?: string }) => {
         if (err?.code !== 'RETURN_LOBBY_FAILED') return;
-        this.socket?.off('room:state', onOk);
+        cleanup();
         reject(new Error(err?.message ?? '대기실로 돌아갈 수 없습니다.'));
       };
       // Register before emit — server may broadcast immediately
       this.socket.once('room:state', onOk);
-      this.socket.on('room:error', onErr);
+      this.socket.once('room:error', onErr);
       this.socket.emit('return_to_lobby', {});
     });
   }
@@ -186,6 +190,10 @@ class GameSocket {
     this.socket?.emit('chat_message', { message });
   }
 
+  sendReaction(emoji: string) {
+    this.socket?.emit('send_reaction', { emoji });
+  }
+
   // ── Listeners ────────────────────────────────────────────
 
   onRoomState(handler: (state: GameState) => void) {
@@ -218,6 +226,14 @@ class GameSocket {
 
   offRoomError(handler: (data: { code: string; message: string }) => void) {
     this.socket?.off('room:error', handler);
+  }
+
+  onPlayerReaction(handler: (data: { playerId: string; emoji: string }) => void) {
+    this.socket?.on('player:reaction', handler);
+  }
+
+  offPlayerReaction(handler: (data: { playerId: string; emoji: string }) => void) {
+    this.socket?.off('player:reaction', handler);
   }
 }
 

@@ -218,6 +218,8 @@ function DealtCardSlot({
 
 // ── Main component ───────────────────────────────────────────────────────────
 
+const REACTION_EMOJIS = ['😂', '😤', '🤔', '😱', '😎', '🥶', '🤑', '💀'];
+
 interface Phase2ScreenProps {
   gameState: GameState;
   currentPlayerId: string;
@@ -225,6 +227,8 @@ interface Phase2ScreenProps {
   onPlayCard: (cardId: number) => void;
   onUseItemReroll: () => void;
   onUseItemPeek: (targetId: string) => void;
+  onSendReaction: (emoji: string) => void;
+  externalReactions: Record<string, string>;
 }
 
 // 부동산 카드 획득 애니메이션 타입 (Phase1의 winFly와 동일 구조)
@@ -244,8 +248,11 @@ export function Phase2Screen({
   onPlayCard,
   onUseItemReroll,
   onUseItemPeek,
+  onSendReaction,
+  externalReactions,
 }: Phase2ScreenProps) {
   const [showPeekSelect, setShowPeekSelect] = useState(false);
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
   // roundKey: 라운드가 바뀔 때마다 부동산 카드를 리마운트해 애니메이션 재실행
   const [roundKey, setRoundKey] = useState(gameState.phase2RoundNumber);
   const prevRound = useRef(gameState.phase2RoundNumber);
@@ -354,11 +361,17 @@ export function Phase2Screen({
     onPlayCard(cardId);
   };
 
+  const handleSendReaction = (emoji: string) => {
+    setShowReactionPicker(false);
+    playClick();
+    onSendReaction(emoji);
+  };
+
   const playerIndex = (id: string) => gameState.players.findIndex((p) => p.id === id);
 
   return (
     <div
-      className="h-screen max-h-screen flex flex-col font-sans relative overflow-hidden"
+      className="h-screen max-h-screen flex flex-col font-sans relative"
       style={{
         backgroundColor: '#e0e7ff',
         backgroundImage: 'radial-gradient(#c7d2fe 20%, transparent 20%), radial-gradient(#c7d2fe 20%, transparent 20%)',
@@ -373,6 +386,33 @@ export function Phase2Screen({
           onSelect={(id) => { playClick(); setShowPeekSelect(false); onUseItemPeek(id); }}
           onCancel={() => setShowPeekSelect(false)}
         />
+      )}
+
+      {/* 이모티콘 선택 팝업 — 화면 중앙 fixed 오버레이 */}
+      {showReactionPicker && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center"
+          onClick={() => setShowReactionPicker(false)}
+        >
+          <div
+            className="bg-white border-4 border-black rounded-3xl px-4 py-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col items-center gap-2"
+            style={{ animation: 'reactionPopCenter 0.2s cubic-bezier(0.34,1.6,0.64,1) forwards' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="text-[11px] font-black text-slate-500">감정 표현</span>
+            <div className="grid grid-cols-4 gap-1">
+              {REACTION_EMOJIS.map((emoji) => (
+                <button
+                  key={emoji}
+                  onClick={() => handleSendReaction(emoji)}
+                  className="text-2xl w-11 h-11 flex items-center justify-center rounded-2xl hover:bg-yellow-100 active:scale-90 transition-transform border-2 border-transparent hover:border-yellow-300"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 부동산 카드 획득 shine→fly 오버레이 (Phase1의 winFly와 동일 패턴) */}
@@ -489,39 +529,80 @@ export function Phase2Screen({
             const pi = gameState.playerItems[player.id];
             const piMeta = pi?.item && pi.item !== 'reverse' ? ITEM_META[pi.item as 'reroll' | 'peek'] : null;
             const isMe = player.id === currentPlayerId;
+            const reaction = externalReactions[player.id];
             return (
-              <div
-                key={player.id}
-                className={`flex items-center gap-1.5 px-2 py-1.5 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
-                  isMe ? 'bg-blue-100' : 'bg-white'
-                }`}
-              >
-                <div className={`relative w-6 h-6 flex-none ${AVATAR_COLORS[idx % AVATAR_COLORS.length]} rounded-full border-2 border-black flex items-center justify-center text-xs`}>
-                  {AVATARS[idx % AVATARS.length]}
-                  {piMeta && (
-                    <div className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 ${piMeta.color} ${pi?.used ? 'grayscale opacity-60' : ''} rounded-full border border-black flex items-center justify-center`}>
-                      {(() => { const Icon = piMeta.icon; return <Icon className="w-1.5 h-1.5 text-white" />; })()}
+              <div key={player.id} className="relative">
+                {/* 말풍선 */}
+                {reaction && (
+                  <div
+                    key={reaction + player.id}
+                    className="absolute -top-9 left-1/2 z-20 pointer-events-none"
+                    style={{ transform: 'translateX(-50%)', animation: 'reactionPop 0.3s cubic-bezier(0.34,1.6,0.64,1) forwards' }}
+                  >
+                    <div className="relative bg-white border-2 border-black rounded-xl px-2 py-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] whitespace-nowrap flex items-center justify-center">
+                      <span style={{ fontSize: '18px', lineHeight: '1', fontFamily: 'Apple Color Emoji, Segoe UI Emoji, sans-serif' }}>{reaction}</span>
+                      {/* 말풍선 꼬리 */}
+                      <div className="absolute -bottom-[7px] left-1/2 -translate-x-1/2 w-0 h-0"
+                        style={{ borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '7px solid black' }}
+                      />
+                      <div className="absolute -bottom-[5px] left-1/2 -translate-x-1/2 w-0 h-0"
+                        style={{ borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderTop: '6px solid white' }}
+                      />
                     </div>
-                  )}
-                </div>
-                <div className="flex flex-col leading-none gap-0.5 min-w-0">
-                  <span className="font-black text-[10px] text-slate-800 truncate">
-                    {player.nickname}{isMe && <span className="text-blue-500">●</span>}
-                  </span>
-                  {player.hasSelected ? (
-                    <span className="text-[9px] font-black text-green-600 flex items-center gap-0.5">
-                      <Check className="w-2 h-2" />제출
+                  </div>
+                )}
+                <div
+                  className={`flex items-center gap-1.5 px-2 py-1.5 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                    isMe ? 'bg-blue-100' : 'bg-white'
+                  }`}
+                >
+                  <div className={`relative w-6 h-6 flex-none ${AVATAR_COLORS[idx % AVATAR_COLORS.length]} rounded-full border-2 border-black flex items-center justify-center text-xs`}>
+                    {AVATARS[idx % AVATARS.length]}
+                    {piMeta && (
+                      <div className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 ${piMeta.color} ${pi?.used ? 'grayscale opacity-60' : ''} rounded-full border border-black flex items-center justify-center`}>
+                        {(() => { const Icon = piMeta.icon; return <Icon className="w-1.5 h-1.5 text-white" />; })()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col leading-none gap-0.5 min-w-0 flex-1">
+                    <span className="font-black text-[10px] text-slate-800 truncate">
+                      {player.nickname}{isMe && <span className="text-blue-500">●</span>}
                     </span>
-                  ) : (
-                    <span className="text-[9px] font-bold text-slate-400">고민중</span>
-                  )}
+                    {player.hasSelected ? (
+                      <span className="text-[9px] font-black text-green-600 flex items-center gap-0.5">
+                        <Check className="w-2 h-2" />제출
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-bold text-slate-400">고민중</span>
+                    )}
+                  </div>
+                  {/* 내 카드에만 이모티콘 버튼 */}
+                  {isMe && (() => {
+                    const myReaction = externalReactions[currentPlayerId];
+                    const active = showReactionPicker || !!myReaction;
+                    return (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setShowReactionPicker((v) => !v); }}
+                        className={`flex-none w-6 h-6 border-2 border-black rounded-full overflow-hidden transition-transform active:scale-90 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] select-none ${
+                          active ? 'bg-yellow-400 scale-110' : 'bg-yellow-300 hover:bg-yellow-400'
+                        }`}
+                      >
+                        <span
+                          className="flex w-full h-full items-center justify-center"
+                          style={{ fontSize: '12px', fontFamily: 'Apple Color Emoji, Segoe UI Emoji, sans-serif', lineHeight: '1', marginTop: '-1px' }}
+                        >
+                          {myReaction ?? '😊'}
+                        </span>
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
             );
           };
 
           return (
-            <div className="px-3 pb-2 flex flex-col gap-1.5">
+            <div className="px-3 pt-9 pb-2 flex flex-col gap-1.5">
               <div className="grid grid-cols-2 gap-1.5">
                 {pairs.map(renderPlayerCard)}
               </div>
@@ -597,7 +678,7 @@ export function Phase2Screen({
                 {bottomRow.length > 0 && renderRow(bottomRow, topRow.length)}
               </div>
 
-              {/* 직업 카드 더미 */}
+              {/* 부동산 카드 더미 */}
               <div className="flex-none self-center">
                 <div ref={deckRef} className={`relative ${cardW} ${cardH}`}>
                   {[3, 2, 1].map((o) => (
@@ -615,7 +696,7 @@ export function Phase2Screen({
                     style={{ backgroundColor: '#d4b896' }}
                   >
                     <span className="text-2xl">🏠</span>
-                    <span className="text-black font-black text-[9px]">직업카드</span>
+                    <span className="text-black font-black text-[9px]">부동산카드</span>
                   </div>
                 </div>
               </div>

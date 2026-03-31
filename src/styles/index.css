@@ -169,3 +169,17 @@ body {
   animation: phase2-card-reveal 0.45s cubic-bezier(0.4, 0, 0.2, 1) forwards,
              phase2-card-reveal-shine 0.45s ease-out forwards;
 }
+
+/* Phase2: 감정 표현 말풍선 팝 애니메이션 */
+@keyframes reactionPop {
+  0%   { opacity: 0; transform: translateX(-50%) scale(0.4); }
+  70%  { transform: translateX(-50%) scale(1.15); }
+  100% { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+
+/* Phase2: 감정 표현 중앙 팝업 등장 애니메이션 */
+@keyframes reactionPopCenter {
+  0%   { opacity: 0; transform: scale(0.5); }
+  70%  { transform: scale(1.06); }
+  100% { opacity: 1; transform: scale(1); }
+}

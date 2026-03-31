@@ -8,12 +8,14 @@ interface GameContainerProps {
   activePeek: PeekResult | null;
   activePassEvent: LastPassEvent | null;
   activeRoundResult: RoundResult | null;
+  reactions: Record<string, string>;
   onBid: (amount: number) => void;
   onPass: () => void;
   onPlayCard: (cardId: number) => void;
   onUseItemReroll: () => void;
   onUseItemPeek: (targetId: string) => void;
   onUseItemReverse: () => void;
+  onSendReaction: (emoji: string) => void;
 }
 
 export function GameContainer({
@@ -22,12 +24,14 @@ export function GameContainer({
   activePeek,
   activePassEvent,
   activeRoundResult,
+  reactions,
   onBid,
   onPass,
   onPlayCard,
   onUseItemReroll,
   onUseItemPeek,
   onUseItemReverse,
+  onSendReaction,
 }: GameContainerProps) {
   if (gameState.phase === 'phase2_playing') {
     return (
@@ -38,6 +42,8 @@ export function GameContainer({
         onPlayCard={onPlayCard}
         onUseItemReroll={onUseItemReroll}
         onUseItemPeek={onUseItemPeek}
+        onSendReaction={onSendReaction}
+        externalReactions={reactions}
       />
     );
   }
@@ -54,6 +60,8 @@ export function GameContainer({
       onUseItemReroll={onUseItemReroll}
       onUseItemPeek={onUseItemPeek}
       onUseItemReverse={onUseItemReverse}
+      onSendReaction={onSendReaction}
+      externalReactions={reactions}
     />
   );
 }

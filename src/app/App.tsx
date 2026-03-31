@@ -129,6 +129,9 @@ export default function App() {
   const matchFoundIntervalRef = useRef<number | null>(null);
   /** false면 `room:state` 무시 — 나가기 직후 지연 패킷이 로비로 되돌리는 것 방지 */
   const acceptRoomStateRef = useRef(false);
+  /** 감정 표현: playerId → emoji (자동 소멸) */
+  const [reactions, setReactions] = useState<Record<string, string>>({});
+  const reactionTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const clearMatchFoundNotice = useCallback(() => {
     if (matchFoundTimeoutRef.current) {
@@ -315,6 +318,19 @@ export default function App() {
   };
   const handleUseItemReverse = () => gameSocket.useItemReverse();
 
+  const handleSendReaction = (emoji: string) => {
+    if (isDevPhase2) {
+      const playerId = DEV_PHASE2_MOCK_ID;
+      setReactions((prev) => ({ ...prev, [playerId]: emoji }));
+      if (reactionTimersRef.current[playerId]) clearTimeout(reactionTimersRef.current[playerId]);
+      reactionTimersRef.current[playerId] = setTimeout(() => {
+        setReactions((prev) => { const next = { ...prev }; delete next[playerId]; return next; });
+      }, 3000);
+      return;
+    }
+    gameSocket.sendReaction(emoji);
+  };
+
   const handleLeaveRoom = () => {
     void leaveToRoomMenu();
   };
@@ -436,12 +452,28 @@ export default function App() {
       setRoomDestroyedBanner(msg);
     };
 
+    const handlePlayerReaction = (data: { playerId: string; emoji: string }) => {
+      setReactions((prev) => ({ ...prev, [data.playerId]: data.emoji }));
+      if (reactionTimersRef.current[data.playerId]) {
+        clearTimeout(reactionTimersRef.current[data.playerId]);
+      }
+      reactionTimersRef.current[data.playerId] = setTimeout(() => {
+        setReactions((prev) => {
+          const next = { ...prev };
+          delete next[data.playerId];
+          return next;
+        });
+      }, 3000);
+    };
+
     gameSocket.onRoomState(handleRoomState);
     gameSocket.onRoomDestroyed(handleRoomDestroyed);
+    gameSocket.onPlayerReaction(handlePlayerReaction);
 
     return () => {
       gameSocket.offRoomState(handleRoomState);
       gameSocket.offRoomDestroyed(handleRoomDestroyed);
+      gameSocket.offPlayerReaction(handlePlayerReaction);
     };
   }, [leaveToRoomMenu, applyRoomMenuOnly, joinSource, quickMatchStage, clearMatchFoundNotice]);
 
@@ -728,12 +760,14 @@ export default function App() {
           activePeek={activePeek}
           activePassEvent={activePassEvent}
           activeRoundResult={activeRoundResult}
+          reactions={reactions}
           onBid={handleBid}
           onPass={handlePass}
           onPlayCard={handlePlayCard}
           onUseItemReroll={handleUseItemReroll}
           onUseItemPeek={handleUseItemPeek}
           onUseItemReverse={handleUseItemReverse}
+          onSendReaction={handleSendReaction}
         />
       )}
 

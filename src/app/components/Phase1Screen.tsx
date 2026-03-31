@@ -239,6 +239,8 @@ function PeekModal({
 
 // ── Main component ───────────────────────────────────────────────────────────
 
+const REACTION_EMOJIS = ['😂', '😤', '🤔', '😱', '😎', '🥶', '🤑', '💀'];
+
 interface Phase1ScreenProps {
   gameState: GameState;
   currentPlayerId: string;
@@ -250,6 +252,8 @@ interface Phase1ScreenProps {
   onUseItemReroll: () => void;
   onUseItemPeek: (targetId: string) => void;
   onUseItemReverse: () => void;
+  onSendReaction: (emoji: string) => void;
+  externalReactions: Record<string, string>;
 }
 
 export function Phase1Screen({
@@ -263,11 +267,20 @@ export function Phase1Screen({
   onUseItemReroll,
   onUseItemPeek,
   onUseItemReverse,
+  onSendReaction,
+  externalReactions,
 }: Phase1ScreenProps) {
   const [bidAmount, setBidAmount] = useState(1000);
   const [showPeekSelect, setShowPeekSelect] = useState(false);
   const [bidFlash, setBidFlash] = useState(false);
   const [showMyCards, setShowMyCards] = useState(false);
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
+
+  const handleSendReaction = (emoji: string) => {
+    setShowReactionPicker(false);
+    playClick();
+    onSendReaction(emoji);
+  };
 
   // 낙찰 / 포기획득 카드 날아가기 애니메이션
   interface WinFlyState {
@@ -522,6 +535,33 @@ export function Phase1Screen({
         />
       )}
 
+      {/* 이모티콘 선택 팝업 */}
+      {showReactionPicker && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center"
+          onClick={() => setShowReactionPicker(false)}
+        >
+          <div
+            className="bg-white border-4 border-black rounded-3xl px-4 py-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col items-center gap-2"
+            style={{ animation: 'reactionPopCenter 0.2s cubic-bezier(0.34,1.6,0.64,1) forwards' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="text-[11px] font-black text-slate-500">감정 표현</span>
+            <div className="grid grid-cols-4 gap-1">
+              {REACTION_EMOJIS.map((emoji) => (
+                <button
+                  key={emoji}
+                  onClick={() => handleSendReaction(emoji)}
+                  className="text-2xl w-11 h-11 flex items-center justify-center rounded-2xl hover:bg-yellow-100 active:scale-90 transition-transform border-2 border-transparent hover:border-yellow-300"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Peek result notification */}
       {activePeek && (
         <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-purple-400 border-4 border-black rounded-2xl p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-center min-w-[280px]">
@@ -648,6 +688,25 @@ export function Phase1Screen({
                       player.hasPassed ? 'bg-slate-300 opacity-60' : 'bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] sm:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
                     } ${isMe ? 'border-yellow-500 bg-yellow-50' : ''} ${isTheirTurn ? 'ring-2 ring-yellow-400 -translate-y-0.5 sm:-translate-y-1' : ''} ${isNext ? 'ring-2 ring-blue-300' : ''}`}
                   >
+                    {/* 이모지 반응 말풍선 */}
+                    {externalReactions[player.id] && (
+                      <div
+                        key={externalReactions[player.id] + player.id}
+                        className="absolute -top-9 left-1/2 z-20 pointer-events-none"
+                        style={{ transform: 'translateX(-50%)', animation: 'reactionPop 0.3s cubic-bezier(0.34,1.6,0.64,1) forwards' }}
+                      >
+                        <div className="relative bg-white border-2 border-black rounded-xl px-2 py-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] whitespace-nowrap flex items-center justify-center">
+                          <span style={{ fontSize: '18px', lineHeight: '1', fontFamily: 'Apple Color Emoji, Segoe UI Emoji, sans-serif' }}>{externalReactions[player.id]}</span>
+                          <div className="absolute -bottom-[7px] left-1/2 -translate-x-1/2 w-0 h-0"
+                            style={{ borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '7px solid black' }}
+                          />
+                          <div className="absolute -bottom-[5px] left-1/2 -translate-x-1/2 w-0 h-0"
+                            style={{ borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderTop: '6px solid white' }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
                     {/* Action toast bubble */}
                     {toast && (
                       <div
@@ -705,6 +764,26 @@ export function Phase1Screen({
                         {player.currentBid > 0 ? (player.currentBid >= 1000 ? `${Math.floor(player.currentBid / 1000)}k` : String(player.currentBid)) : '대기'}
                       </span>
                     )}
+                    {/* 내 카드에만 이모지 버튼 */}
+                    {isMe && (() => {
+                      const myReaction = externalReactions[currentPlayerId];
+                      const active = showReactionPicker || !!myReaction;
+                      return (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setShowReactionPicker((v) => !v); }}
+                          className={`mt-0.5 flex-none w-6 h-6 border-2 border-black rounded-full overflow-hidden transition-transform active:scale-90 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] select-none ${
+                            active ? 'bg-yellow-400 scale-110' : 'bg-yellow-300 hover:bg-yellow-400'
+                          }`}
+                        >
+                          <span
+                            className="flex w-full h-full items-center justify-center"
+                            style={{ fontSize: '12px', fontFamily: 'Apple Color Emoji, Segoe UI Emoji, sans-serif', lineHeight: '1', marginTop: '-1px' }}
+                          >
+                            {myReaction ?? '😊'}
+                          </span>
+                        </button>
+                      );
+                    })()}
                   </div>
                 );
               })}
