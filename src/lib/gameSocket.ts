@@ -1,8 +1,8 @@
 import { io, Socket } from 'socket.io-client';
 import { GameState, ItemType } from './socket-types';
 
-// const BACKEND_URL = 'https://joopjoop-backend.onrender.com/';
-const BACKEND_URL = 'http://localhost:8000/';
+const BACKEND_URL = 'https://joopjoop-backend.onrender.com/';
+// const BACKEND_URL = 'http://localhost:8000/';
 
 class GameSocket {
   private socket: Socket | null = null;
